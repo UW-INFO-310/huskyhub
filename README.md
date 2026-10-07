@@ -13,11 +13,11 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and st
 If Git is installed, run:
 
 ```bash
-git clone https://github.com/UW-INFO-310/huskyhub.git huskyhub-au26
-cd huskyhub-au26
+git clone https://github.com/UW-INFO-310/huskyhub.git
+cd huskyhub
 ```
 
-Alternatively use **Code → Download ZIP**, extract it, rename the extracted folder to `huskyhub-au26`, and open a terminal inside it. You should see this README and `docker-compose.yaml`. Use the course repository above rather than either source repository. All nine labs are already present; do not switch weekly Git branches or download a fresh starter each week.
+Alternatively use **Code → Download ZIP**, extract it, rename the extracted folder to `huskyhub`, and open a terminal inside it. You should see this README and `docker-compose.yaml`. Use the course repository above rather than either source repository. All nine labs are already present; do not switch weekly Git branches or download a fresh starter each week.
 
 **macOS / Linux / Windows Git Bash:**
 
@@ -49,7 +49,7 @@ The starter serves HTTP on port 80. You add HTTPS on port 443 in Week 3. Flask l
 | 6 | [Authorization, IDOR, and Offensive Tools](labs/week-06/README.md) | Week 5 signed sessions |
 | 7 | [SQL Injection and OWASP Top 10](labs/week-07/README.md) | Weeks 3–6 cumulative fixes |
 | 8 | [XSS, Bug Bounty, and Automated Testing](labs/week-08/README.md) | HTTPS, sessions, authorization, and parameterized queries |
-| 9 | [AI Security: Prompt Injection and Insecure Output](labs/week-09/README.md) | Week 1 baseline, Week 8 CSP, and Week 9 Ollama pre-lab |
+| 9 | [AI Security: Prompt Injection and Insecure Output](labs/week-09/README.md) | Week 8 CSP and Week 9 Ollama pre-lab |
 
 Certificate trust is an optional Week 3 extension. Additional attack-detection logging is an optional [Week 5 extension](labs/week-05/OPTIONAL_DETECTION.md). Required signed sessions, brute force, and lockout are all in Week 5.
 

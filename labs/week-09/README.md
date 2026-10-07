@@ -10,7 +10,7 @@
 
 ## Overview
 
-The AI Academic Advisor has been present since Week 1. You have been building context all quarter on how web applications fail. Now you apply that same lens to the AI component.
+You have been building context all quarter on how web applications fail. This week you begin using the AI Academic Advisor and apply that same lens to the AI component. Complete the Ollama pre-lab before recording your baseline or attempting injections.
 
 This week you exploit four AI-specific vulnerabilities: direct prompt injection, indirect prompt injection via uploaded documents, system prompt leakage, and XSS delivered through unescaped AI output. You then remediate each and write automated test cases that assert the AI behaves correctly under adversarial inputs.
 
@@ -123,11 +123,11 @@ Inspect `docker compose logs huskyhub-ollama` and `docker compose logs huskyhub-
 
 ## Steps
 
-### 1. Return to Your Week 1 Notes
+### 1. Establish an AI Baseline
 
-Open your Week 1 lab report. Re-read the chatbot responses you documented in Week 1 Step 7. Before proceeding, annotate each response with what you now understand about why it is significant.
+After completing the pre-lab, log in as jsmith and open `/chatbot`. Before attempting injections, ask ordinary advising questions, such as "What can you help me with?" and "What data do you use to answer my academic questions?" Record the responses and the model you used.
 
-The chatbot responses in Week 1 were reconnaissance data — just like HTTP headers and cookie flags. A student who answered "I don't know what to look for yet" in Week 1 is now equipped to see exactly what those responses reveal about the underlying system architecture and data access.
+Inspect the page and its source for exposed context or configuration, just as you inspected other pages in Week 1. These are new Week 9 observations: no earlier chatbot report is required. Keep the baseline to compare with the injection attempts and your later hardening checks.
 
 ---
 
@@ -387,4 +387,4 @@ Reflect on:
 
 ## Submission checklist
 
-Submit the [four-section report](../../LAB_GUIDE.md), annotated Week 1 baseline, exact direct/indirect prompts and responses, safe DOM/encoding evidence, code or diffs, five adversarial cases plus deterministic checks, and normal advising/summarization verification. Report unavailable or inconclusive model attempts honestly. Due date, points, and LMS destination are **TBD by the instructor**.
+Submit the [four-section report](../../LAB_GUIDE.md), initial Week 9 AI baseline, exact direct/indirect prompts and responses, safe DOM/encoding evidence, code or diffs, five adversarial cases plus deterministic checks, and normal advising/summarization verification. Report unavailable or inconclusive model attempts honestly. Due date, points, and LMS destination are **TBD by the instructor**.

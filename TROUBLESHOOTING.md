@@ -10,7 +10,7 @@ Autumn 2026 uses one cumulative working folder and nine labs, obtained from the 
 |---|---|---|
 | Current folder | pwd | Get-Location |
 | List files | ls | Get-ChildItem |
-| Enter the course folder from its parent | cd huskyhub-au26 | cd huskyhub-au26 |
+| Enter the course folder from its parent | cd huskyhub | cd huskyhub |
 | Create .env once | cp .env.example .env | Copy-Item .env.example .env |
 | Stop a foreground command | Ctrl+C | Ctrl+C |
 
@@ -88,7 +88,7 @@ A volume reset restores seed data, while your hardened code stays changed. Rerun
 
 ## Week 1 — Browser Observations
 
-Headers are under Network → selected request → Response Headers. Cookies are under Application/Storage → Cookies. Firefox uses Storage rather than Chrome's Application label. Inspect the POST response to see Set-Cookie; a page loaded later need not set the cookies again. The AI page can be inspected without downloading a model; unavailable responses are expected until Week 9.
+Headers are under Network → selected request → Response Headers. Cookies are under Application/Storage → Cookies. Firefox uses Storage rather than Chrome's Application label. Inspect the POST response to see Set-Cookie; a page loaded later need not set the cookies again. Leave the AI Advisor for Week 9; there is no chatbot step or model setup in Week 1.
 
 ## Week 2 — Packet Capture and ARP
 

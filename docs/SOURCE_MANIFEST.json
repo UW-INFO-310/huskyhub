@@ -1,6 +1,6 @@
 {
   "build_date": "2026-10-06",
-  "output": "Plain local huskyhub-au26 folder; no Git initialization or publication",
+  "output": "Autumn course in the huskyhub folder; source repositories retained separately",
   "newest_shared_commit": "c3c4c552dd49ba0a2f878b01f1c780e11064ae43",
   "sources": {
     "spring": {
@@ -141,5 +141,6 @@
     "authorized_date": "2026-10-06",
     "destination_initial_commit": "8d478479714a185713ca7f30f8a61ac682a0a547",
     "method": "Separate checkout; course at repository root; preserve initial history; no force push"
-  }
+  },
+  "course_folder": "huskyhub"
 }

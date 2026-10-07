@@ -1,6 +1,6 @@
 # Lab workflow and report guide
 
-Work from the `huskyhub-au26` folder every week. Your code, database, HTTPS settings, and later signed sessions carry forward.
+Work from the `huskyhub` folder every week. Your code, database, HTTPS settings, and later signed sessions carry forward.
 
 ## Before and after each lab
 

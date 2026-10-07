@@ -13,7 +13,7 @@ Built locally on October 6, 2026. The instructor approved the nine-week plan and
 
 | Autumn week | Kept from Spring | Selected from Summer / Autumn adaptation |
 |---|---|---|
-| 1 | AI interface/source baseline and Week 9 revisit | Week 1 beginner terminal/DevTools explanations, observation tables, and account comparisons; cookie tampering deferred to Week 5 |
+| 1 | Reconnaissance and hacker mindset | Week 1 beginner terminal/DevTools explanations, observation tables, and account comparisons; cookie tampering deferred to Week 5; chatbot use deferred to Week 9 |
 | 2 | Full capture/MITM goals; week-02 single-direction ARP and restore helpers from `d5cf6d7` | Summer `821186c` interface/tutorial clarity; corrected three-endpoint path and explicit forwarding; helpers now resolve MACs on the requested adapter |
 | 3 | Ten-step bcrypt/migration/TLS lab, including June `37dd518` idempotency/copy/static fixes | Compatible newer prose; optional local certificate trust from `6387329`; localhost SAN and portable certificate config |
 | 4 | June `91d7297` audit/disclosure corrections | Current_app import and logging guidance from Summer Week 4; preserve HTTP exception codes and specify log mounting/context |
@@ -21,7 +21,7 @@ Built locally on October 6, 2026. The instructor approved the nine-week plan and
 | 6 | Full required second IDOR plus Repeater/Intruder practice; June `26b0d5c` route distinctions | Compatible Summer authorization wording; corrected signed-session prerequisites, own-grades default, and advisor policy |
 | 7 | June `971f1a2` MySQL # payloads and full threat-model/parameterization scope | Summer Week 6 is nearly the same; adapt tooling and login expectations to prior bcrypt, lockout, and signed sessions |
 | 8 | June `39dcaa9` inline-script CSP and reflected-search clarification; bug bounty and test workload | Compatible Summer prose; separate encoding/CSP verification, authenticated scans, and positive payload assertions |
-| 9 | Week 1 revisit, uploader-scoped indirect injection from `dcc7798`, full AI objectives | Summer August native Ollama setup (`1cc88b0`, `202814b`, `18b5c87`) with actual local code/config support, container fallback, and consistent HTTPS/authenticated tests |
+| 9 | Uploader-scoped indirect injection from `dcc7798`, full AI objectives | Summer August native Ollama setup (`1cc88b0`, `202814b`, `18b5c87`) with actual local code/config support, container fallback, and consistent HTTPS/authenticated tests |
 
 No completed student bcrypt, HTTPS, logging, signed-session, lockout, authorization, SQL-parameterization, CSP, or output-encoding solution was added to the application. Doc snippets/scaffolding remain guided instructional examples; students implement them in their own cumulative copy.
 
@@ -48,4 +48,11 @@ Summer Week 1's role-tampering exercise and Spring's older Week 2 session-remedi
 
 Nine required labs, Spring progression, separate required Week 5, optional certificate trust/extra detection alerts, vulnerable starter, and the original local build are accepted. The later explicit request authorizes publishing this course to UW-INFO-310/huskyhub. Per-week approval pauses were superseded by the instructor's request to build everything now and edit afterwards.
 
-Dates, weekdays, due dates, grading weights, midterm timing, support links, are intentionally TBD. The course distribution URL is now https://github.com/UW-INFO-310/huskyhub. Use [INSTRUCTOR_REVIEW.md](INSTRUCTOR_REVIEW.md) for remaining choices and [VALIDATION.md](VALIDATION.md) for tested behavior and limitations.
+Dates, weekdays, due dates, grading weights, midterm timing, support links are intentionally TBD. The course distribution URL is now https://github.com/UW-INFO-310/huskyhub. Use [INSTRUCTOR_REVIEW.md](INSTRUCTOR_REVIEW.md) for remaining choices and [VALIDATION.md](VALIDATION.md) for tested behavior and limitations.
+
+
+## Instructor Revision — October 6, 2026
+
+Removed original Week 1 questions 3 and 5, retaining original questions 1, 2, and 4 and renumbering them 1–3. Removed the chatbot step and AI page from the exploration table; the different-user step is now Step 7. Week 9 establishes its own AI baseline instead of requiring earlier chatbot notes. Student folder names, clone/cd commands, and setup text now use huskyhub to match UW-INFO-310/huskyhub. The local course folder was renamed accordingly; application code is unchanged.
+
+Before each future push, show the instructor the proposed commit message.
