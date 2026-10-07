@@ -1,0 +1,215 @@
+# Week 6 Lab — Authorization, IDOR, and Offensive Tools
+
+**Quarter:** Autumn 2026 · **Prerequisites:** required Week 5 signed sessions; Week 4 HTTP exception handling
+
+[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
+
+**Lecture:** Authorization and Permissions; Hackers, Offensive Techniques, and Malware
+
+---
+
+## Overview
+
+This week the focus shifts from who you are (authentication) to what you are allowed to do (authorization). HuskyHub has broken access controls at multiple points: students can view other students' grades by changing a URL parameter, advisor-only routes have no server-side role check, and some routes lack an independent permission check. Week 5 now protects identity/role against cookie forgery; it did not add ownership checks or protect every endpoint. You will exploit these manually, then use Burp Suite to automate your findings.
+
+---
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| Browser Developer Tools | Manually manipulate URL parameters |
+| Burp Suite Community Edition | Intercept, modify, and replay HTTP requests |
+| curl | Test authorization checks from the command line |
+| Python requests | Automate IDOR enumeration |
+
+**Download Burp Suite Community:** [portswigger.net/burp/communitydownload](https://portswigger.net/burp/communitydownload)
+
+Burp Suite is available for macOS, Windows, and Linux. Download the installer for your platform and follow the standard installation steps. No license is required for Community Edition.
+
+### Platform Notes for curl
+
+**macOS / Linux:** `curl` is pre-installed. Use it directly in Terminal.
+
+**Windows:** call `curl.exe` in PowerShell to avoid the legacy curl alias, or use Git Bash. Use `-k` only for this local self-signed certificate.
+
+---
+
+## Steps
+
+### 1. Map Authorization-Sensitive Endpoints
+
+**What makes an endpoint "authorization-sensitive":**
+An authorization-sensitive endpoint is any URL where the data returned or the action performed should be restricted to a specific user or role. The clearest indicator is an ID parameter in the URL or request body — `student_id`, `user_id`, `doc_id`. These IDs are object references: they tell the server which database record to retrieve. If the server retrieves whichever record the client requests without first confirming the client owns or has permission to access that record, every other user's data is one URL edit away.
+
+Log in as `jsmith`. Compile a list of every URL containing an ID parameter: `student_id`, `user_id`, `doc_id`, `enrollment_id`, etc. This is your IDOR candidate list.
+
+---
+
+### 2. Exploit IDOR on Grades
+
+**What IDOR is and why it is distinct from other access control failures:**
+Insecure Direct Object Reference (IDOR) occurs when the application exposes a direct reference to an internal object (a database record, a file) in a way the user can manipulate, without verifying authorization before serving the object. The difference between IDOR and a broken login is the *level* at which the control fails: the login check verified you are a valid user, but no check verifies that this valid user is the owner of record number 5. The server trusts the number in the URL.
+
+Navigate to your own grades:
+```
+https://localhost/grades?student_id=3
+```
+
+Now change the `student_id` to each value from 3 to 7. For each, record:
+- Whether the request succeeds
+- Whose record was returned
+- What grade data is exposed
+
+Document whether any server-side check is performed to verify the requesting user owns the record.
+
+---
+
+### 3. Exploit Broken Access Control on Admin Routes
+
+While logged in as `jsmith` (a student), directly navigate to each of these routes:
+```
+https://localhost/admin/users
+https://localhost/admin/grades
+https://localhost/admin/pending
+```
+
+For each route, document whether access is granted and what is exposed. They behave differently:
+
+- `/admin/grades` has **no server-side authorization check at all** — in the starter it even lacks a login check. Test it in both a signed-in student session and a separate signed-out browser. You changed no cookies and sent no special headers; you simply navigated to a URL. This is broken access control via forced browsing.
+- `/admin/users` and `/admin/pending` **do** check the role. Your Week 5 migration should now read it from the signed session, so changing an old role cookie must no longer bypass them. Before this week they redirect a student home; your new authorization policy will return an explicit 403 instead. Do not undo Week 5 to make cookie forgery work again.
+
+Document which routes enforce a check, which do not, and exactly what each exposes.
+
+---
+
+### 4. Set Up Burp Suite
+
+**What Burp Suite is doing as a proxy and what "intercept" means:**
+Burp Suite positions itself between your browser and the server as an HTTP proxy. Your browser sends its requests to Burp, Burp forwards them to the server, receives the responses, and passes them back to your browser. This gives you full visibility into every request and response, and the ability to modify either before it reaches its destination. "Intercept mode" pauses each request, letting you read and edit it before clicking Forward to release it. HTTP History shows all captured traffic. Repeater lets you send saved requests to the server as many times as you want with arbitrary modifications — this is how you will systematically enumerate IDOR targets without clicking through the browser manually for each one.
+
+Configure your browser to proxy through Burp Suite:
+1. Open Burp Suite → **Proxy → Intercept → Open Browser**
+2. In the built-in browser, log in as jsmith at `https://localhost/login` first, then open `https://localhost/grades?student_id=3`
+3. In Burp, find the request in **Proxy → HTTP History**
+4. Right-click → **Send to Repeater**
+
+Use Burp's built-in browser to avoid changing your normal browser's proxy. If intercept is holding a request, forward it or turn interception off while browsing. HTTPS certificate setup and localhost proxy behavior depend on the browser; use Burp's current built-in-browser guidance before changing system proxy settings. If you do change a proxy, record and restore it afterwards.
+
+---
+
+### 5. Automate IDOR Enumeration with Burp Repeater and Intruder
+
+**What Intruder does and what "payload positions" are:**
+Intruder is Burp's request automation tool. You mark a parameter value in the request as a "payload position" (using § markers) and provide a list of values to substitute in. Intruder then sends one request per payload value and records every response. For IDOR, you set the `student_id` as the payload position and use a sequential number list as the payload — Intruder effectively sends the same request 20 times with IDs 1 through 20, and you can scan the response lengths and status codes to identify which IDs returned real records versus errors.
+
+In Burp Repeater, systematically change the `student_id` value from 1 to 15 and send each request. Record every student ID that returns a valid grade record with a name attached.
+
+Then use **Intruder** to automate this:
+1. Right-click the request in Repeater → **Send to Intruder**
+2. Highlight the `student_id` value → **Add §**
+3. Under **Payloads**, select **Numbers** from 1 to 20
+4. Start the attack and review results
+
+> **Note:** Burp Suite Community Edition throttles Intruder attacks. This is expected — it will complete, just slowly.
+
+---
+
+### 6. Find a Second IDOR Endpoint
+
+Using Burp's history or by manually browsing, identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Strong candidates: `/documents/download` (references a file path directly), `/documents/delete` (`doc_id`), and `/enrollment/drop` (`enrollment_id`). Note that `/enrollment` and `/messages` now read your user_id from the **signed session** rather than a URL parameter. The old cookie-tampering path should already be closed; focus on client-controlled object references that still lack ownership checks.
+
+Document the endpoint, vulnerable parameter, and exposed data/action using only fictional fixture records you are allowed to alter. For document tests create a harmless file as each of two fixture users before comparing IDs. This second finding is required; implementing an additional ownership fix beyond the assigned grade/admin remediation may be included as an extension.
+
+---
+
+### 7. Remediation — Server-Side Authorization Decorator
+
+**What a Python decorator is and why this pattern is the right approach for authorization:**
+A decorator in Python is a function that wraps another function, adding behavior before or after the wrapped function runs. `@require_role('admin')` placed above a route function means "before executing this route, run the `require_role` check — if it fails, abort; if it passes, run the route as normal." The value of this pattern is consistency: rather than copying an `if role != 'admin': abort(403)` check into every protected route (and risking forgetting it), you define the check once and apply it as a decorator. `functools.wraps(f)` copies metadata from the original function to the wrapper so Flask's routing system can still identify the function correctly. `abort(403)` immediately terminates the request with an HTTP 403 Forbidden response.
+
+> **Builds on Week 5.** These decorators read the user's role and id from Flask's signed `session` (`session.get('role')`, `session.get('user_id')`), which assumes you completed Week 5's migration from plaintext cookies to signed sessions. If that migration is incomplete, finish Week 5 first. Do not fall back to forgeable identity cookies.
+
+Create a reusable authorization decorator in `flask/app/auth_utils.py`:
+
+```python
+from functools import wraps
+from flask import request, redirect, url_for, abort, session
+
+def require_role(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            role = session.get('role', 'student')
+            if role not in roles:
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+def require_own_resource(student_id_param='student_id'):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('authenticated') or session.get('user_id') is None:
+                abort(401)
+            current_user_id = str(session.get('user_id'))
+            requested_id = request.args.get(student_id_param)
+            if requested_id is None:
+                requested_id = kwargs.get(student_id_param, current_user_id)
+            role = session.get('role', 'student')
+            if role not in ('advisor', 'admin') and str(requested_id) != current_user_id:
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+```
+
+---
+
+### 8. Apply the Decorators
+
+Apply `@require_own_resource()` to `/grades`, preserving the normal no-parameter own-grades view. Apply `@require_role('admin')` to user management, approval, deletion, and pending-registration routes. Apply **only** `@require_role('advisor', 'admin')` to `/admin/grades`; stacking an admin-only decorator there would wrongly exclude advisors. Preserve Week 4 HTTP error codes so abort(403) reaches the client as 403, not 500. Log denials with user and endpoint. Decide and document signed-out behavior consistently.
+
+Rebuild and test.
+
+---
+
+### 9. Verify Remediation
+
+Repeat Steps 2 and 3 against the hardened application. Confirm:
+- Accessing another student's grades returns HTTP 403
+- Accessing admin routes as a student returns HTTP 403
+- `/grades` without a query still shows the student's own records
+- Legitimate access still works for advisors and admins
+- Unauthenticated requests are denied, with no internal traceback
+- Old unsigned role cookies do not bypass the signed-session policy
+
+Paste the HTTP responses in your report.
+
+---
+
+## Write-Up Questions
+
+**Q1.** Define Insecure Direct Object Reference (IDOR) in your own words. Why does hiding the edit button in the UI fail to prevent IDOR? What is the only reliable place to enforce access control?
+
+**Q2.** Explain the difference between role-based access control (RBAC) and attribute-based access control (ABAC). Which model does your remediation implement? What scenario would require ABAC instead?
+
+**Q3.** Burp Intruder enumerated student IDs 1–20 in seconds. What would a script that automated this against a production application need to do to avoid triggering detection? What defenses would slow it down?
+
+---
+
+## Hacker Mindset Prompt
+
+IDOR is the simplest class of vulnerability to exploit — change a number, get someone else's data — yet it appears in major production systems continuously. Meta's 2021 data scraping incident, exposing 533 million records, was rooted in an access control failure exploitable through API enumeration.
+
+Reflect on:
+
+- **Contrarian:** The application showed the correct data to the correct user in the UI. A student who only uses the UI would never notice this vulnerability. What does this say about the gap between "works correctly" and "is secure"?
+- **Committed:** A committed attacker who discovers an IDOR vulnerability does not stop at one record. Write a Python script (pseudocode is fine) that would exfiltrate the complete grade database using the IDOR you found.
+- **Creative:** IDOR becomes significantly harder to exploit if object IDs are not sequential integers. What alternative ID scheme would make enumeration impractical, and what are the tradeoffs?
+
+
+## Submission checklist
+
+Submit the [four-section report](../../LAB_GUIDE.md), required step evidence, code or diffs, answers/reflections, and normal-use checks. Include the threat model/tool outputs or tests named in this lab. Due date, points, and LMS destination are **TBD by the instructor**.

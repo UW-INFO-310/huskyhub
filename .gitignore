@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+flask/app/uploads/*
+!flask/app/uploads/.gitkeep
+*.log
+.DS_Store
+.venv/
+.pytest_cache/
+logs/
+nginx/key.pem
+nginx/cert.pem

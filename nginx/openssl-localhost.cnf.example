@@ -1,0 +1,20 @@
+# Week 3 alternative for OpenSSL/LibreSSL versions without -addext.
+# Only used when the student generates the local self-signed certificate.
+[req]
+prompt = no
+distinguished_name = local_subject
+x509_extensions = local_extensions
+
+[local_subject]
+C = US
+ST = Washington
+O = UW
+CN = localhost
+
+[local_extensions]
+subjectAltName = @local_names
+basicConstraints = critical,CA:TRUE
+
+[local_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
