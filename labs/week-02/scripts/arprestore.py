@@ -6,13 +6,13 @@ the client and the server rather than waiting for TTL expiry.
 """
 
 #!/usr/bin/env python3
-# Usage: sudo .venv/bin/python arprestore.py <interface> <target-ip> <real-ip>
+# Usage: sudo python3 arprestore.py <interface> <target-ip> <real-ip>
 #
 # Sends a burst of legitimate ARP replies to <target-ip> advertising the correct
 # MAC address for <real-ip>. Run once for each spoofed direction:
 #
-#   sudo .venv/bin/python arprestore.py <iface> <client-ip> <server-ip>
-#   sudo .venv/bin/python arprestore.py <iface> <server-ip> <client-ip>
+#   sudo python3 arprestore.py <iface> <client-ip> <server-ip>
+#   sudo python3 arprestore.py <iface> <server-ip> <client-ip>
 
 import sys
 from scapy.all import ARP, Ether, sendp, srp, get_if_hwaddr
@@ -52,7 +52,7 @@ def restore(iface: str, target_ip: str, real_ip: str, count: int = 6) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: sudo .venv/bin/python arprestore.py <interface> <target-ip> <real-ip>")
-        print("Example: sudo .venv/bin/python arprestore.py en0 192.168.1.50 192.168.1.10")
+        print("Usage: sudo python3 arprestore.py <interface> <target-ip> <real-ip>")
+        print("Example: sudo python3 arprestore.py en0 192.168.1.50 192.168.1.10")
         sys.exit(1)
     restore(sys.argv[1], sys.argv[2], sys.argv[3])

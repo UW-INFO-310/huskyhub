@@ -6,7 +6,7 @@ This is the complete local Autumn draft. The nine lab files are canonical; chang
 
 - Course calendar, lecture weekdays, due dates, midterm timing, grading weights, LMS destination, and support/office-hour links.
 - Confirm access to [UW-INFO-310/huskyhub](https://github.com/UW-INFO-310/huskyhub) for your students. Setup uses this course repository or its ZIP download, without fetching the Spring/Summer sources.
-- Week 2 device availability: the corrected MITM needs distinct client/server/attacker endpoints. Two laptops plus a browser-capable phone can supply them. Provide a tested isolated setup for students who lack the devices or have restricted routing/firewall policies.
+- Week 2 supports solo completion with a laptop hosting HuskyHub and a phone or another browser-capable victim device. Test the isolated network and a separate gateway for the ARP demonstration; a phone that is both victim and hotspot gateway overlaps those roles. Teach the optional three-endpoint MITM demonstration in lab. Keep direct-to-server cookie capture and ARP-cache evidence as separate observations.
 - Decide how the optional Week 3 certificate-trust and Week 5 detection extensions are assessed. No extra-credit points were invented.
 - Check available RAM/GPU and model performance for Week 9. Native Ollama is preferred, with a slower container fallback; no Discord file replacement is needed.
 

@@ -22,13 +22,13 @@
     "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
     "Makefile": "6a3809490e65e62a0ff9db8b05374f6e63dc3441ef275057d6392a63f9ffff2d",
     "README.md": "1ac08a0988001fb9fda5367b6a3ed3d8e6964095c82f2a30b7591b9bcdef649d",
-    "TROUBLESHOOTING.md": "a1fa9eb944c73f3130706d1328b55ab4b95c5a1bba94a46341260dc934e1d170",
+    "TROUBLESHOOTING.md": "82ab4420c6ef2df6e7a4ac9cba5660f87543e30329c4f5258b31e9be47050149",
     "database/init.sql": "de1b8320fecfcceaa8e35a4e85abd8f5a837aafdbdfd5c4735a5574b466d5436",
     "docker-compose.yaml": "ada129b04929481c31d5f8bf64dbce476e3eb827ad5ed5851e0abfdd7cdb27d7",
-    "docs/INSTRUCTOR_REVIEW.md": "bef6be55e280d23c6ff13989ab0995ea0f84e2d1f0d5ba9e81c80fae6d612153",
-    "docs/MERGE_NOTES.md": "049c4f76664a201e25efd796e14f67fb98c34e385be073809ad7f5630f33d58a",
-    "docs/SOURCE_MANIFEST.json": "4313e4bb7a629bdf291f278a47f2ef47f2902297b3e0a715f3dc572c55f2a8fa",
-    "docs/VALIDATION.md": "0d68fdbb6bee841bafbbfdc5b9640fd635b900ad3628cc7dcb03327202531b55",
+    "docs/INSTRUCTOR_REVIEW.md": "671466df42a15396ef8ff03a7dfb53f15103b8e17adc45faad9b558b13888155",
+    "docs/MERGE_NOTES.md": "7e3541310395a3486d3fd66f647619a04da271767401430dd4a77ae03719c474",
+    "docs/SOURCE_MANIFEST.json": "0ea0f1c2fb8ca4707ae6d27265ef9d632c6c21b0a18f0e0a1d71634d91350143",
+    "docs/VALIDATION.md": "e4dd6654b48f60738e1ac48f6ca404687b611332f813852e4c7bddf8fc6bf041",
     "flask/Dockerfile": "1badcf52280e4aed9753553f415df56ca52b3a43a21fea0f166f4bb3b2b1c8c8",
     "flask/app/__init__.py": "ab13fe1f44b16fc890fc93cd0ee05509465b3db31ca579ddcba1415c4c833e5c",
     "flask/app/database.py": "88020328256968fda7559bdb03c98b1b39fcc0147ffd9dc1640d193a35f12775",
@@ -57,9 +57,9 @@
     "flask/app/uploads/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "flask/requirements.txt": "4b85a5179f6dc9487f420dee2f2b3e219c667f74187b441df2a3cf1d2bf99a19",
     "labs/week-01/README.md": "7242455c508492cb1e1ac6ef157a7dc813c136b90ccdf308d01b38256fbe98b8",
-    "labs/week-02/README.md": "202574db87af08c5c07ac457ec4fccc29ecc38f7de945c6db573a45d51614078",
-    "labs/week-02/scripts/arprestore.py": "c9c37aab692cd918679f27e7fcf169812abf1ab6a11242a002d4c86b0b6b89f5",
-    "labs/week-02/scripts/arpspoof.py": "bf30c074cc5ec9297af249a33da7db42c8de91551553b0214bd18d479f02378e",
+    "labs/week-02/README.md": "99c910c1814d2241d1fdac5a7079a771d14400525f187b7f43127ebd5cbb71c9",
+    "labs/week-02/scripts/arprestore.py": "ca77414153fc1f967b67e82d6c04206d7f87fbb3bbd31754a4c0b903949f5b75",
+    "labs/week-02/scripts/arpspoof.py": "f98e5353ab986c03a4f786bb0b6fc7343c9e28bb70cf4f4487515d187305d2cf",
     "labs/week-03/README.md": "40185350dafdc90d3daf15bfd7090f94a863909fc6be32de998887acbfb70a01",
     "labs/week-04/README.md": "2bdd71cfca206e99d3aa9152303344720eec5ab1b3be3870cd1bfba1416272a6",
     "labs/week-05/OPTIONAL_DETECTION.md": "b3505b6e0ab99561fc83b1af3a2a8f23e646e7a26926b6d1635652926fddaed9",
@@ -73,5 +73,19 @@
     "nginx/openssl-localhost.cnf.example": "4dd41da42b5ae90fe62ee96dc342c616eb00b8694f633e642042c75df428bd89"
   },
   "publication_preparation": "Only distribution metadata and instructions updated; code unchanged since 18 passing checks.",
-  "latest_edit": "Week 1 questions/chatbot step removed; Week 9 establishes its own AI baseline; folder/setup names standardized to huskyhub. App code unchanged."
+  "latest_edit": "Week 2 restored to Summer six-step layout with a two-device workflow, original questions and policy warning, targeted-ARP correction, direct pip/Python setup, and no submission checklist; related notes and helper usage text synchronized.",
+  "latest_edit_date": "2026-10-13",
+  "latest_edit_validation": {
+    "result": "passed",
+    "checks": [
+      "Summer question/reflection and platform setup sections match verbatim",
+      "Policy warning differs only in the selected-target ARP sentence",
+      "Six main steps; Wireshark tutorial before steps; no virtual-environment commands or submission checklist",
+      "Distributed Markdown local links and balanced code fences",
+      "Two helper missing-argument help paths with packet functions stubbed; no network operations",
+      "Helper packet logic and all application code unchanged"
+    ],
+    "runtime_tests_rerun": false,
+    "live_network_checks_run": false
+  }
 }

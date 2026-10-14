@@ -23,3 +23,9 @@ Docker CLI/Compose is installed, but Docker's engine socket is absent. No Docker
 No live ARP attack, packet capture, Windows/macOS/Linux forwarding, Burp/ZAP scan, vulnerability advisory download, or native/container Ollama model run was performed. Browser certificate trust, CSP behavior, hardware performance, and nondeterministic AI outcomes need the teaching team's runtime walkthrough. Local tests do not certify that a student's future remediation implementation is correct.
 
 [Instructor checklist](INSTRUCTOR_REVIEW.md) · [Source/decision record](MERGE_NOTES.md)
+
+## Week 2 Documentation Revision — October 13, 2026
+
+Verified the six-step sequence and preceding Wireshark tutorial, Summer's exact Write-Up Questions/Hacker Mindset and platform installation sections, and the policy warning with only the selected-target ARP sentence corrected. Checked local Markdown links and balanced code fences across the distributed course. The lab and setup guide contain no virtual-environment commands or added submission checklist.
+
+The ARP helpers differ only in comments and printed usage/example text. Both missing-argument help paths were checked with Scapy packet functions replaced by stubs that fail if called; no packets were sent. The original 18 runtime checks above remain the October 6 results. No live capture, forwarding change, or hardware walkthrough was performed for this documentation revision.

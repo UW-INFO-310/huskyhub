@@ -14,7 +14,7 @@ Built locally on October 6, 2026. The instructor approved the nine-week plan and
 | Autumn week | Kept from Spring | Selected from Summer / Autumn adaptation |
 |---|---|---|
 | 1 | Reconnaissance and hacker mindset | Week 1 beginner terminal/DevTools explanations, observation tables, and account comparisons; cookie tampering deferred to Week 5; chatbot use deferred to Week 9 |
-| 2 | Full capture/MITM goals; week-02 single-direction ARP and restore helpers from `d5cf6d7` | Summer `821186c` interface/tutorial clarity; corrected three-endpoint path and explicit forwarding; helpers now resolve MACs on the requested adapter |
+| 2 | Week-02 single-direction ARP and restore helpers from `d5cf6d7`, resolving MACs on the requested adapter | Summer main six-step README and preceding Wireshark tutorial; two-device independent work, separate cookie/ARP observations, optional three-endpoint demonstration, explicit forwarding; original questions and warning retained with the subnet claim corrected |
 | 3 | Ten-step bcrypt/migration/TLS lab, including June `37dd518` idempotency/copy/static fixes | Compatible newer prose; optional local certificate trust from `6387329`; localhost SAN and portable certificate config |
 | 4 | June `91d7297` audit/disclosure corrections | Current_app import and logging guidance from Summer Week 4; preserve HTTP exception codes and specify log mounting/context |
 | 5 | Required standalone scope, wordlist, stable secret and seed-schema reset guidance from `d01f1bb` | Full route/navbar/logout migration from readme3.5.md; HTTPS/brute-force measurement from `b641989`; extra detection alerts optional |
@@ -56,3 +56,9 @@ Dates, weekdays, due dates, grading weights, midterm timing, support links are i
 Removed original Week 1 questions 3 and 5, retaining original questions 1, 2, and 4 and renumbering them 1–3. Removed the chatbot step and AI page from the exploration table; the different-user step is now Step 7. Week 9 establishes its own AI baseline instead of requiring earlier chatbot notes. Student folder names, clone/cd commands, and setup text now use huskyhub to match UW-INFO-310/huskyhub. The local course folder was renamed accordingly; application code is unchanged.
 
 Before each future push, show the instructor the proposed commit message.
+
+## Week 2 Revision — October 13, 2026
+
+Restored Summer's six-step lab with Understanding Wireshark before the steps. The laptop hosts HuskyHub and the lab tools, while a phone or another browser-capable device acts as the victim. Cookie capture/replay at the receiving server and ARP manipulation are separate observations; the instructor teaches a true three-endpoint MITM as an optional in-lab demonstration.
+
+Kept Summer's Write-Up Questions and Hacker Mindset section verbatim. Kept its UW Acceptable Use Policy/CFAA warning, correcting only the claim that the provided script poisons the entire subnet. Removed the added submission checklist and virtual-environment setup, restoring direct pip/Python commands and matching script usage text. Existing packet behavior and interface-first helper arguments are unchanged. Setup and instructor notes now match this workflow.

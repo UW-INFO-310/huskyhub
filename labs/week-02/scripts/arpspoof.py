@@ -6,7 +6,7 @@ on an isolated network, as described in the lab README.
 """
 
 #!/usr/bin/env python3
-# Usage: sudo .venv/bin/python arpspoof.py <interface> <target-ip> <spoof-ip>
+# Usage: sudo python3 arpspoof.py <interface> <target-ip> <spoof-ip>
 #
 # Sends continuous forged ARP replies to <target-ip> claiming that <spoof-ip>
 # is reachable at this machine's MAC address. Run two instances simultaneously
@@ -58,7 +58,7 @@ def spoof(iface: str, target_ip: str, spoof_ip: str, interval: float = 2.0) -> N
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: sudo .venv/bin/python arpspoof.py <interface> <target-ip> <spoof-ip>")
-        print("Example: sudo .venv/bin/python arpspoof.py en0 192.168.1.50 192.168.1.10")
+        print("Usage: sudo python3 arpspoof.py <interface> <target-ip> <spoof-ip>")
+        print("Example: sudo python3 arpspoof.py en0 192.168.1.50 192.168.1.10")
         sys.exit(1)
     spoof(sys.argv[1], sys.argv[2], sys.argv[3])

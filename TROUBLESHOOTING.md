@@ -26,33 +26,21 @@ Verify with docker --version, docker compose version, and python3 --version (mac
 
 ## Python Tools
 
-Create one local toolbox environment so pip installs do not change your system Python. Keep its terminal active when following pip/python commands in later labs.
+Use `pip3` and `python3` on macOS/Linux, or `pip` and `python` on Windows. Follow each lab's platform-specific installation commands; Week 2 installs Scapy directly and runs its macOS/Linux helpers with `sudo python3`, or `python` in PowerShell as Administrator on Windows.
+
+For local scripts that need requests:
 
 **macOS/Linux:**
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install requests
+pip3 install requests
 ```
 
-**Windows Git Bash:**
-
-```bash
-python -m venv .venv
-source .venv/Scripts/activate
-python -m pip install requests
-```
-
-**Windows PowerShell:**
+**Windows:**
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install requests
+pip install requests
 ```
-
-If PowerShell disallows activation, use `.venv\Scripts\python.exe` in place of python and `.venv\Scripts\python.exe -m pip` for installation. You do not need to change system execution policy. On macOS/Linux, sudo may bypass your activated environment, so the Week 2 privileged helpers explicitly use `sudo .venv/bin/python`.
 
 Install tools as their labs introduce them: scapy in Week 2, pip-audit in Week 4, sqlmap in Week 7, and pytest in Week 8. Application dependencies go in flask/requirements.txt and require a Docker rebuild; installing bcrypt only on your laptop will not put it in the Flask image.
 
@@ -92,9 +80,11 @@ Headers are under Network → selected request → Response Headers. Cookies are
 
 ## Week 2 — Packet Capture and ARP
 
-Use loopback for localhost (lo0/lo/Npcap Loopback Adapter) and the real LAN interface for the three-endpoint MITM. Install Wireshark's capture-permission helper/Npcap if no appropriate interface is visible. Install Scapy in .venv. The helper resolves MAC addresses on the interface you give it, so choose the matching Scapy interface identifier.
+Use loopback for localhost (lo0/lo/Npcap Loopback Adapter) and the real LAN interface for the second device's requests. Install Wireshark's capture-permission helper/Npcap if no appropriate interface is visible. Install Scapy using the platform commands in [Week 2](labs/week-02/README.md#installing-tools-by-platform). The helper resolves MAC addresses on the interface you give it, so choose the matching Scapy interface identifier.
 
-A browser on the victim's localhost never sends its traffic through another laptop. Use the server's LAN IP and distinct client/server/attacker roles. Hotspot client isolation or forwarding/firewall restrictions may prevent the lab path. Use the teaching team's tested isolated setup if necessary; do not treat a disconnected victim as interception success. Stop both spoof processes and restore peers plus original forwarding/redirect settings even when troubleshooting.
+The laptop hosts HuskyHub and runs the tools; a phone or another browser-capable device is the victim. Use the laptop's LAN IP in the victim's browser. Requests addressed to that server can be captured before ARP spoofing, so record cookie exposure/replay and ARP evidence separately. A true client–server–attacker MITM demonstration with a third endpoint is an optional instructor-led activity.
+
+For the ARP demonstration, the laptop, victim, and gateway must have distinct IP addresses. An isolated home router can supply the gateway with two participant devices. If the phone or laptop also provides the hotspot, those roles overlap; use an isolated home-router network or ask the teaching team for an alternative. Hotspot client isolation or forwarding/firewall restrictions may prevent access. Do not treat a disconnected victim as interception success. Stop both spoof processes, restore both peers' ARP mappings, and restore the original forwarding setting even when troubleshooting.
 
 ## Week 3 — bcrypt and TLS
 
