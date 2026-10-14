@@ -6,8 +6,6 @@
 
 **Prerequisites:** Week 1; keep the HTTP starter for this lab. HTTPS begins in Week 3. Run commands from the huskyhub course folder.
 
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 ---
 
 ## Overview
@@ -177,20 +175,18 @@ Sends a burst of correct ARP replies to immediately repair the ARP caches of bot
 
 ## Steps
 
-### 1. Device Setup (Two-Device Exercise)
+### 1. Device Setup (MITM Exercise)
 
 > **Reminder:** Both devices must be on an isolated personal network — not school wifi or any shared network. See the warning at the top of this lab.
 
 This exercise requires a second device acting as the **victim device**. Any device with a browser will work — a second laptop, a desktop, or a phone. Your primary machine is the **attacker**.
 
-**On the attacker machine only:** ensure HuskyHub is running (`docker compose up` in the `huskyhub` directory) before the victim device tries to connect. The victim device does not need Docker or any special software — only a browser.
+**On the attacker machine only:** ensure HuskyHub is running (`docker compose up` in the `huskyhub-su26` directory) before the victim device tries to connect. The victim device does not need Docker or any special software — only a browser.
 
 **On the victim device:**
-Open a browser and navigate to `http://<attacker-ip>:80` (the attacker machine's IP on the shared network — not localhost). Log in as alee / alexpass so the victim uses a different fixture account from your laptop's jsmith session. Leave this session active and the victim device on. If the page will not load, confirm HuskyHub is running and the devices can reach each other; hotspot client isolation or a host firewall may prevent access.
+Open a browser and navigate to `http://<attacker-ip>:80` (the attacker machine's IP on the shared network — not localhost). Leave this session active and the victim device on.
 
 Connect both devices to the same isolated network (personal mobile hotspot or home router where you are the only user).
-
-For the ARP portion, the attacker, victim, and gateway need separate IP addresses. An isolated home router can provide the gateway while you use just the laptop and phone as participant devices. If the victim phone or attacker laptop is also providing the hotspot, these roles overlap; use an isolated home-router network for this portion, or ask the teaching team for an alternative. No second participant or additional computer is required.
 
 You need three values before proceeding:
 1. Your own IP address (attacker machine)
@@ -242,7 +238,7 @@ Have the victim device navigate to `http://<attacker-ip>:80`. Any network activi
 
 **Alternative — nmap ping sweep (use only if `arp -a` fails):**
 
-First confirm your subnet from your actual network settings; an IP address alone does not establish its prefix length. The following are examples for commonly used hotspot ranges, not values to copy without checking. Only scan your isolated lab network.
+First, determine your subnet. If your IP is `172.20.10.3`, your subnet is `172.20.10.0/28`. If your IP is `192.168.43.5`, your subnet is `192.168.43.0/24`.
 
 ```bash
 # macOS / Linux
@@ -269,25 +265,23 @@ Record all three values before continuing:
 **What IP forwarding does and why disabling it would break the attack:**
 Normally, an operating system discards IP packets addressed to other machines — it is not a router, so forwarding them is not its job. When you run the ARP spoofing script, the victim's traffic starts arriving at your machine because you have told the network you are the gateway. If IP forwarding is disabled, your machine receives those packets and drops them — the victim device loses internet connectivity, which is immediately noticeable and indicates something is wrong. Enabling IP forwarding tells the kernel to forward those packets onward to the real gateway, so traffic continues flowing transparently. From the victim device's perspective, everything appears normal. `sysctl` is the Linux/macOS tool for reading and writing kernel parameters at runtime; `net.inet.ip.forwarding=1` (macOS) and `net.ipv4.ip_forward=1` (Linux) are the specific parameters that control IP forwarding.
 
-Record the original forwarding setting before changing it, so you can restore it in Step 6. Forwarding is relevant to traffic redirected through the laptop toward the gateway; the victim's direct requests to HuskyHub on that laptop are a separate path. Verify what actually continues working rather than assuming forwarding is sufficient under every firewall policy.
+This ensures traffic continues to flow so the victim device does not lose connectivity during the attack.
 
 **macOS:**
 ```bash
-sysctl net.inet.ip.forwarding
 sudo sysctl -w net.inet.ip.forwarding=1
 ```
 
 **Linux:**
 ```bash
-sysctl net.ipv4.ip_forward
 sudo sysctl -w net.ipv4.ip_forward=1
 ```
 
 **Windows (PowerShell as Administrator):**
 ```powershell
-# Replace Wi-Fi with the adapter used for this isolated network.
-Get-NetIPInterface -InterfaceAlias "Wi-Fi" -AddressFamily IPv4 | Select-Object InterfaceAlias,Forwarding
-Set-NetIPInterface -InterfaceAlias "Wi-Fi" -AddressFamily IPv4 -Forwarding Enabled -PolicyStore ActiveStore
+# Windows handles IP forwarding differently — Scapy manages packet forwarding
+# at the application layer. No separate sysctl step is required on Windows.
+# Ensure PowerShell is running as Administrator before Step 3.
 ```
 
 ---
@@ -301,33 +295,31 @@ Open two terminals on the attacker machine and run both commands simultaneously:
 
 ```bash
 # Terminal 1: Tell the victim that you are the gateway
-sudo python3 labs/week-02/scripts/arpspoof.py <interface> <victim-ip> <gateway-ip>
+sudo python3 labs/week-02/scripts/arpspoof.py <victim-ip> <gateway-ip> <interface>
 
 # Terminal 2: Tell the gateway that you are the victim
-sudo python3 labs/week-02/scripts/arpspoof.py <interface> <gateway-ip> <victim-ip>
+sudo python3 labs/week-02/scripts/arpspoof.py <gateway-ip> <victim-ip> <interface>
 ```
 
 **Example** (iPhone hotspot, Wi-Fi interface `en0`, victim at `172.20.10.5`, gateway at `172.20.10.1`):
 ```bash
 # Terminal 1
-sudo python3 labs/week-02/scripts/arpspoof.py en0 172.20.10.5 172.20.10.1
+sudo python3 labs/week-02/scripts/arpspoof.py 172.20.10.5 172.20.10.1 en0
 
 # Terminal 2
-sudo python3 labs/week-02/scripts/arpspoof.py en0 172.20.10.1 172.20.10.5
+sudo python3 labs/week-02/scripts/arpspoof.py 172.20.10.1 172.20.10.5 en0
 ```
 
 > **macOS note:** The interface will typically be `en0` (Wi-Fi) or `en1`. Confirm with `ifconfig`.
 
-> **Windows note:** Open both PowerShell windows as Administrator. Use python instead of sudo python3. Scapy's interface identifier may differ from the Windows adapter alias; list its interfaces with `python -c "from scapy.all import show_interfaces; show_interfaces()"` and select the corresponding adapter. Quote identifiers containing spaces.
-
-Record the victim's gateway-to-MAC mapping before and during spoofing (`arp -a` on a computer). If your victim is a phone without access to its neighbor table, use a capture showing the forged ARP reply's sender IP/MAC and target as packet evidence, and explain the difference between sending that claim and proving the phone accepted it. A screenshot of running terminals alone is not evidence of a changed cache.
+> **Windows note:** Open both PowerShell windows as Administrator. The interface name will appear as a quoted string (e.g., `"Wi-Fi"` or `"Ethernet"`). Confirm with `ipconfig`.
 
 ---
 
 ### 4. Capture the Victim's Session Cookie
 
 **Why the session cookie is the target and what it grants the attacker:**
-HTTP is a stateless protocol — the server has no built-in memory of who you are between requests. Session cookies solve this by storing a token that identifies your authenticated session. When the victim's browser sends any request to HuskyHub, it attaches this cookie automatically. In this two-device setup, Wireshark can read the cookie values in unencrypted requests arriving at your HuskyHub server. This demonstrates cleartext exposure at the receiving host; the capture alone does not establish that ARP spoofing changed the request path. The Wireshark filter `ip.addr == <victim-ip> && http.cookie` narrows the capture to HTTP requests from the victim device's IP that contain cookie headers. Once you have the cookie value, you do not need the victim's password — you can impersonate their authenticated session directly.
+HTTP is a stateless protocol — the server has no built-in memory of who you are between requests. Session cookies solve this by storing a token that identifies your authenticated session. When the victim's browser sends any request to HuskyHub, it attaches this cookie automatically. Because you are now a man-in-the-middle receiving all their traffic, Wireshark can read the cookie value from the unencrypted HTTP stream. The Wireshark filter `ip.addr == <victim-ip> && http.cookie` narrows the capture to HTTP requests from the victim device's IP that contain cookie headers. Once you have the cookie value, you do not need the victim's password — you can impersonate their authenticated session directly.
 
 While both `arpspoof.py` processes are running, open Wireshark on the **attacker machine**:
 
@@ -347,20 +339,20 @@ While both `arpspoof.py` processes are running, open Wireshark on the **attacker
 
 **On the victim device:** navigate to `http://<attacker-ip>:80` and click between pages in HuskyHub (Home, Grades, etc.). Each page load sends an HTTP request with the session cookie attached.
 
-On the attacker machine, packets from the victim's IP will appear in the capture list. Click one, expand **Hypertext Transfer Protocol** in the packet detail pane, and look for the **Cookie** field. Record authenticated, role, and user_id. Compare a victim page request before spoofing with one during spoofing: are the HTTP cookies readable in both? Keep that observation separate from your ARP evidence in Step 3.
+On the attacker machine, packets from the victim's IP will appear in the capture list. Click one, expand **Hypertext Transfer Protocol** in the packet detail pane, and look for the **Cookie** field. Record the full cookie value.
 
 ---
 
 ### 5. Impersonate the Victim
 
 **Why manually setting a cookie is equivalent to stealing credentials:**
-Cookies are stored by the browser and sent automatically on every request to the matching domain. The browser has no mechanism to verify that a cookie was legitimately issued by the server — it stores and transmits whatever value is present. When you open Developer Tools and manually change the `authenticated` cookie to match the victim's value, your browser will send that value on your next request to `localhost`. This starter trusts the readable authenticated, role, and user_id values without a signature; it does not issue an opaque authentication session token. Replaying those values makes the server treat you as that fixture user. There is no second factor, no IP address check, no re-verification — the cookie alone is the authentication proof. This is the exact attack model that motivates the `HttpOnly` and `Secure` cookie flags you observed in Week 1: `HttpOnly` prevents JavaScript from reading the cookie (blocking XSS-based theft), and `Secure` prevents it from being sent over plain HTTP (blocking this exact interception).
+Cookies are stored by the browser and sent automatically on every request to the matching domain. The browser has no mechanism to verify that a cookie was legitimately issued by the server — it stores and transmits whatever value is present. When you open Developer Tools and manually change the `authenticated` cookie to match the victim's value, your browser will send that value on your next request to `localhost`. The server reads the cookie, recognizes it as a valid session token it previously issued, and responds as if it is talking to the victim. There is no second factor, no IP address check, no re-verification — the cookie alone is the authentication proof. This is the exact attack model that motivates the `HttpOnly` and `Secure` cookie flags you observed in Week 1: `HttpOnly` prevents JavaScript from reading the cookie (blocking XSS-based theft), and `Secure` prevents it from being sent over plain HTTP (blocking this exact interception).
 
 In your browser, open Developer Tools → **Application → Cookies → localhost**.
 
 Manually set the `authenticated` cookie to the value you captured. Set the `role` and `user_id` cookies to match what you observed.
 
-Reload `http://localhost`, then open `/grades` without a student_id parameter. Confirm you see alee's identity/grades rather than jsmith's, and record the request and displayed identity. The victim used the laptop's LAN IP; here you set cookies for localhost because your own browser is accessing the same server locally.
+Reload `http://localhost`. Document what you can now access.
 
 ---
 
@@ -379,9 +371,9 @@ sudo python3 labs/week-02/scripts/arprestore.py <interface> <victim-ip> <gateway
 sudo python3 labs/week-02/scripts/arprestore.py <interface> <gateway-ip> <victim-ip>
 ```
 
-Confirm the victim device can still reach HuskyHub normally and can reach the gateway as it could before the exercise. Remove the replayed cookies from your browser and log out.
+Confirm the victim device can still reach HuskyHub normally.
 
-Restore the forwarding value you recorded in Step 2. If its original value was 0, the commands below return it to 0; if it was already enabled, restore that original state instead.
+Disable IP forwarding:
 
 **macOS:**
 ```bash
@@ -392,8 +384,6 @@ sudo sysctl -w net.inet.ip.forwarding=0
 ```bash
 sudo sysctl -w net.ipv4.ip_forward=0
 ```
-
-**Windows (Administrator PowerShell):** restore the original Forwarding value using Set-NetIPInterface on the same adapter with PolicyStore ActiveStore. Scapy does not perform this cleanup for you.
 
 ---
 
