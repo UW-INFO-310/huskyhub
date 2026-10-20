@@ -35,7 +35,7 @@ docker compose up --build
 
 Create `.env` once; preserve it in later weeks instead of copying over your settings. Wait for `huskyhub-db` to be **healthy**, with `huskyhub-flask` and `huskyhub-nginx` **running**. Only MySQL has a healthcheck; that is expected. Open [http://localhost](http://localhost) and log in as `jsmith` / `password123`.
 
-The starter serves HTTP on port 80. You add HTTPS on port 443 in Week 3. Flask listens on 5000 inside Docker; its port is not published. MySQL's host port is controlled by `MYSQL_PORT` in `.env` (default 3306). Native Ollama is introduced in Week 9; its absence in early weeks is expected.
+The starter serves HTTP on port 80. You add HTTPS on port 443 in Week 4. Flask listens on 5000 inside Docker; its port is not published. MySQL's host port is controlled by `MYSQL_PORT` in `.env` (default 3306). Native Ollama is introduced in Week 3; its absence in early weeks is expected.
 
 ## Nine-week course
 
@@ -43,15 +43,15 @@ The starter serves HTTP on port 80. You add HTTPS on port 443 in Week 3. Flask l
 |---|---|---|
 | 1 | [Reconnaissance and The Hacker Mindset](labs/week-01/README.md) | Setup and browser Developer Tools |
 | 2 | [Networking, Packet Capture, and MITM](labs/week-02/README.md) | Week 1 observations |
-| 3 | [Cryptography: Password Hashing and HTTPS](labs/week-03/README.md) | Week 2 cleartext capture |
-| 4 | [Logging, Error Handling, and Third-Party Risk](labs/week-04/README.md) | Week 3 HTTPS |
-| 5 | [Authentication: Sessions, Cookies, and Brute Force](labs/week-05/README.md) — **required standalone lab** | Week 3 bcrypt/HTTPS and Week 4 logs |
-| 6 | [Authorization, IDOR, and Offensive Tools](labs/week-06/README.md) | Week 5 signed sessions |
-| 7 | [SQL Injection and OWASP Top 10](labs/week-07/README.md) | Weeks 3–6 cumulative fixes |
-| 8 | [XSS, Bug Bounty, and Automated Testing](labs/week-08/README.md) | HTTPS, sessions, authorization, and parameterized queries |
-| 9 | [AI Security: Prompt Injection and Insecure Output](labs/week-09/README.md) | Week 8 CSP and Week 9 Ollama pre-lab |
+| 3 | [AI Security: Prompt Injection and System Prompt Leakage](labs/week-03/README.md) | Weeks 1–2 observations and the Ollama pre-lab |
+| 4 | [Cryptography: Password Hashing and HTTPS](labs/week-04/README.md) | Week 2 cleartext capture |
+| 5 | [Logging, Error Handling, and Third-Party Risk](labs/week-05/README.md) | Week 4 HTTPS |
+| 6 | [Authentication: Sessions, Cookies, and Brute Force](labs/week-06/README.md) — **required standalone lab** | Week 4 bcrypt/HTTPS and Week 5 logs |
+| 7 | [Authorization, IDOR, and Offensive Tools](labs/week-07/README.md) | Week 6 signed sessions |
+| 8 | [SQL Injection and OWASP Top 10](labs/week-08/README.md) | Weeks 3–7 cumulative fixes |
+| 9 | [XSS, Bug Bounty, and Automated Testing](labs/week-09/README.md) | HTTPS, sessions, authorization, and parameterized queries |
 
-Certificate trust is an optional Week 3 extension. Additional attack-detection logging is an optional [Week 5 extension](labs/week-05/OPTIONAL_DETECTION.md). Required signed sessions, brute force, and lockout are all in Week 5.
+Certificate trust is an optional Week 4 extension. Additional attack-detection logging is an optional [Week 6 extension](labs/week-06/OPTIONAL_DETECTION.md). Required signed sessions, brute force, and lockout are all in Week 6.
 
 **Course dates, lecture weekdays, due dates, grading weights, and midterm timing: TBD by the instructor.** Use the topics in each lab and the course LMS for the schedule.
 
@@ -100,7 +100,7 @@ docker compose down
 docker compose exec huskyhub-db mysql -u user -psupersecretpw huskyhub
 ```
 
-`down` stops containers while retaining database data. To stop the optional Week 9 container too, use `docker compose --profile ai down`. The [Makefile](Makefile) offers shortcuts if `make` is installed; it is not required on Windows.
+`down` stops containers while retaining database data. To stop the optional Week 3 container too, use `docker compose --profile ai down`. The [Makefile](Makefile) offers shortcuts if `make` is installed; it is not required on Windows.
 
 ### Recovering a broken database
 
@@ -111,11 +111,12 @@ docker compose --profile ai down -v
 docker compose up -d --build
 ```
 
-The database is recreated from your `database/init.sql`. After Week 3, rerun your password migration before logging in; after Week 5, your seed schema must include lockout columns. A reset does not undo your Python code, so stale seed data can be incompatible with hardened routes. See [LAB_GUIDE.md](LAB_GUIDE.md#recovering-after-a-reset).
+The database is recreated from your `database/init.sql`. After Week 4, rerun your password migration before logging in; after Week 6, your seed schema must include lockout columns. A reset does not undo your Python code, so stale seed data can be incompatible with hardened routes. See [LAB_GUIDE.md](LAB_GUIDE.md#recovering-after-a-reset).
 
 ## Files and sources
 
 - `flask/app/`: routes, templates, static assets, and uploaded documents.
+- `flask/tests/test_ai_security.py`: complete Week 3 checks; students run these without writing tests.
 - `flask/requirements.txt`: pinned starter dependencies; additions required by labs are student tasks.
 - `nginx/default.conf`: HTTP starter; students add TLS and CSP later.
 - `database/init.sql`: fictional seed records and starter schema.

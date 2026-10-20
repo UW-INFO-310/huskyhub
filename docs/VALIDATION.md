@@ -1,5 +1,15 @@
 # Validation Record — Autumn 2026
 
+## October 20 — Week 3 AI Revision
+
+- The complete supplied AI tests produce **5 expected failures and 3 passes** on the vulnerable starter. In a temporary copy with only the README's Steps 6–8 applied, **all 8 pass**. The distributed starter application remains unsolved.
+- Independently restoring excessive prompt context, the unwrapped document prompt, the debug HTML comment, or unsafe response rendering produces the corresponding failures (1, 2, 1, and 1). These checks exercise the real Flask route, prompt builder, document reader, and template with controlled database/Ollama boundaries.
+- The existing **18 validation checks pass** after updating lab paths and recognizing the supplied test file. The pinned Flask/Werkzeug/Jinja/requests/MySQL-connector packages were installed in a temporary Python 3.12 environment. Production Docker uses Python 3.11 and was not executed.
+- Both normal and optional-AI Compose configurations parse. All nine lab titles, Week 3's nine steps and three questions, local Markdown links, code fences, Python syntax, moved authentication assets, and unchanged starter application/dependency files were checked.
+- Summer's first five AI steps retain their structure and wording with the obsolete Discord notice removed, date/record-field corrections, removed SQL-injection comparison, and updated internal step references. The XSS exploit, test-writing assignment, and submission checklist are absent from the AI README.
+
+Docker's engine socket is absent. No image build, real MySQL/Ollama run, or full cumulative student walkthrough was performed. The supplied deterministic tests validate code changes rather than certifying live-model prompt-injection resistance. Earlier checks and their original limits remain recorded below.
+
 Built October 6, 2026. This record distinguishes checks of the starter/support code and instructional examples from executing the completed student remediations.
 
 ## Passed Checks

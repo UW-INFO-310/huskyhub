@@ -42,7 +42,7 @@ pip3 install requests
 pip install requests
 ```
 
-Install tools as their labs introduce them: scapy in Week 2, pip-audit in Week 4, sqlmap in Week 7, and pytest in Week 8. Application dependencies go in flask/requirements.txt and require a Docker rebuild; installing bcrypt only on your laptop will not put it in the Flask image.
+Install tools as their labs introduce them: scapy in Week 2, pip-audit in Week 5, sqlmap in Week 8, and pytest in the Week 3 Flask container using the commands in that lab. Application dependencies go in flask/requirements.txt and require a Docker rebuild; installing bcrypt only on your laptop will not put it in the Flask image.
 
 ## Docker and Ports
 
@@ -72,11 +72,11 @@ Run an interactive command in PowerShell, or prefix docker exec/compose exec wit
 
 ### Database reset breaks hardened login
 
-A volume reset restores seed data, while your hardened code stays changed. Rerun password hashing after Week 3 and retain lockout columns in init.sql after Week 5. Read [the recovery checklist](LAB_GUIDE.md#recovering-after-a-reset). Back up evidence before down -v; clear a test account's lockout counters when you only need another lockout test.
+A volume reset restores seed data, while your hardened code stays changed. Rerun password hashing after Week 4 and retain lockout columns in init.sql after Week 6. Read [the recovery checklist](LAB_GUIDE.md#recovering-after-a-reset). Back up evidence before down -v; clear a test account's lockout counters when you only need another lockout test.
 
 ## Week 1 — Browser Observations
 
-Headers are under Network → selected request → Response Headers. Cookies are under Application/Storage → Cookies. Firefox uses Storage rather than Chrome's Application label. Inspect the POST response to see Set-Cookie; a page loaded later need not set the cookies again. Leave the AI Advisor for Week 9; there is no chatbot step or model setup in Week 1.
+Headers are under Network → selected request → Response Headers. Cookies are under Application/Storage → Cookies. Firefox uses Storage rather than Chrome's Application label. Inspect the POST response to see Set-Cookie; a page loaded later need not set the cookies again. Leave the AI Advisor for Week 3; there is no chatbot step or model setup in Week 1.
 
 ## Week 2 — Packet Capture and ARP
 
@@ -86,45 +86,45 @@ The laptop hosts HuskyHub and runs the tools; a phone or another browser-capable
 
 For the ARP demonstration, the laptop, victim, and gateway must have distinct IP addresses. An isolated home router can supply the gateway with two participant devices. If the phone or laptop also provides the hotspot, those roles overlap; use an isolated home-router network or ask the teaching team for an alternative. Hotspot client isolation or forwarding/firewall restrictions may prevent access. Do not treat a disconnected victim as interception success. Stop both spoof processes, restore both peers' ARP mappings, and restore the original forwarding setting even when troubleshooting.
 
-## Week 3 — bcrypt and TLS
+## Week 3 — Ollama and Provided AI Tests
+
+Native setup is in [Week 3](labs/week-03/README.md). Use http://localhost; HTTPS begins in Week 4. OLLAMA_BASE_URL is a base address without /api/chat. Confirm llama3.2 is pulled, a single server is reachable from Docker, and normal chatbot questions work before attacks. Check ollama ps for CPU/GPU placement. A 60-second read timeout is an unavailable-model result, not a security refusal.
+
+For the fallback set OLLAMA_BASE_URL=http://huskyhub-ollama:11434, enable the ai profile, and pull the model inside that container. OLLAMA_PORT is only its published host port. Recreate Flask after URL changes. Native downloads survive Docker volume resets; container downloads do not.
+
+The complete tests are provided in flask/tests/test_ai_security.py. Rebuild, install pytest in huskyhub-flask, and run the file using the three commands in Week 3. A rebuild includes the test file; installing pytest on your laptop does not install it inside Docker. The tests use controlled database/model responses and do not need a running Ollama model or completed later labs. They check code changes, including page-source disclosure and output encoding. Students do not write tests. Continue the live-model observations separately.
+
+## Week 4 — bcrypt and TLS
 
 The Dockerfile copies flask/app/, not flask/migrate_passwords.py. Rebuild utils.py into the image, docker cp the migration script to /app/migrate_passwords.py, and then execute it. Run it idempotently after resets. Keep approved=1 checks and normal registration behavior.
 
 TLS certificates need a localhost SAN, valid dates, and matching mounts. A self-signed warning is expected until the optional trust exercise. Check docker compose logs huskyhub-nginx if it cannot start; confirm key.pem/cert.pem exist and the static mount remains. Use port-443/TLS capture filters: an empty HTTP filter is not proof of encryption by itself.
 
-## Week 4 — Logging and Audits
+## Week 5 — Logging and Audits
 
 Install pip-audit in your local toolbox and run pip-audit -r flask/requirements.txt (or python -m pip_audit with the same arguments). The audit needs internet; an unavailable advisory service is an incomplete audit, not a clean result. Actual advisory counts change, so document your run rather than expecting a fixed output.
 
 Login must import current_app before logging from a route. Create/mount logs/ before opening /var/log/huskyhub/app.log; keep INFO enabled on the logger and handler. Optional user/endpoint fields appear only when supplied. Preserve HTTP exceptions so later abort(403) does not become a generic 500. Generic error handling does not fix the successful arbitrary-file disclosure.
 
-## Week 5 — Sessions and Lockout
+## Week 6 — Sessions and Lockout
 
 Use https://localhost/login in brute.py: the HTTP redirect is not the login result. Run from the course root so the wordlist resolves. Python may not share your browser's certificate trust. A strong secret is generated once into .env and passed through Compose, not regenerated at startup.
 
 Migrate every route and base.html identity read; missing template changes can hide the navbar even when login works. Use session.clear for logout and authenticated-state initialization, while understanding that a signed client cookie is not a revocable server-side session ID. Lockout must recover after its timeout. Clear only tbrown's counters to repeat the test; update init.sql as well as the running schema.
 
-## Week 6 — Authorization and Burp
+## Week 7 — Authorization and Burp
 
 Use Burp's built-in browser, log in over HTTPS, and ensure held requests are forwarded. Old plaintext role cookies should no longer work. Retain own grades without a student_id parameter and advisor access to /admin/grades; do not stack an admin-only decorator there. If you changed a system proxy, restore it after the lab. Community Intruder can be slow; document completion and content rather than assuming every 200 response is a valid record.
 
-## Week 7 — SQL Injection and sqlmap
+## Week 8 — SQL Injection and sqlmap
 
 Keep bcrypt, signed sessions, lockout, and authorization enabled. An arbitrary password should no longer bypass Python bcrypt just because SQL username lookup is injectable. Search endpoints provide the remaining injection targets. Use MySQL # comments; encode # as %23 in URL parameters. Give sqlmap a current signed session cookie, use HTTPS, and verify it reaches your own grades. Flush old scan-session results before remediation verification. Do not undo earlier defenses to get an obsolete result.
 
-## Week 8 — XSS, ZAP, CSP, and pytest
+## Week 9 — XSS, ZAP, CSP, and pytest
 
 Use two browser sessions for sender/recipient tests. HttpOnly can make document.cookie empty even when an injected alert runs. Configure an authenticated ZAP context and confirm protected pages are reached. Findings already fixed in earlier weeks should disappear.
 
-After encoding a stored message, reopening it will not produce a CSP violation; use the lab's separate inline-script probe. Check legitimate Bootstrap/UI behavior too. Regression tests must reach the actual content and assert payload-specific encoding, not merely the absence of a tag in an error page. Preserve the chatbot output target for Week 9.
-
-## Week 9 — Ollama and AI Tests
-
-Native setup is in [Week 9](labs/week-09/README.md). No Discord replacement files are needed. OLLAMA_BASE_URL is a base address without /api/chat. Confirm llama3.2 is pulled, a single server is reachable from Docker, and normal chatbot questions work before attacks. Check ollama ps for CPU/GPU placement. A 60-second read timeout is a controlled unavailable-model result, not a security refusal.
-
-For the fallback set OLLAMA_BASE_URL=http://huskyhub-ollama:11434, enable the ai profile, and pull the model inside that container. OLLAMA_PORT is only its published host port. Recreate Flask after URL changes. Native downloads survive Docker volume resets; container downloads do not.
-
-AI tests must authenticate, find an actual AI response, and distinguish a refusal from encoded rendering or CSP blocking. Check only the AI response region for leakage, and separately test the template's debug comment. Keep model variability in your report; a clean set of prompts is a regression baseline, not an absolute guarantee.
+After encoding a stored message, reopening it will not produce a CSP violation; use the lab's separate inline-script probe. Check legitimate Bootstrap/UI behavior too. Regression tests must reach the actual content and assert payload-specific encoding, not merely the absence of a tag in an error page. Keep the chatbot output encoding from Week 3.
 
 ## Asking for Help
 

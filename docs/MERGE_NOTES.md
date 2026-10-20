@@ -1,5 +1,15 @@
 # Autumn 2026 Merge Notes
 
+## Current Sequence — October 20, 2026
+
+The instructor moved AI security to Week 3. The remaining sequence is Week 4 cryptography, Week 5 logging, Week 6 required authentication, Week 7 authorization, Week 8 SQL injection, and Week 9 XSS. Whole lab folders and their assets were moved; active course links, prerequisites, setup/reset guidance, tool timing, and support comments were updated together. The source mapping and prior decisions below describe the original build and subsequent history.
+
+Week 3 follows Summer's README structure, with lecture references limited to AI Risk Management and AI Security. The normal-use baseline is in pre-lab setup. The XSS attack exercise and related question were removed; the brief output-text fix remains. Q2 now addresses reducing model context and risk, while Q3 concerns the limits of model instructions. The submission checklist was removed. Direct/indirect injection exercises remain for the instructor's model walkthrough.
+
+The system-prompt HTML-comment removal is now part of Step 6 prompt hardening. Step 8 retains the `| safe` removal without asking students to exploit the browser. Step 9 supplies eight complete, repeatable pytest cases in `flask/tests/test_ai_security.py`; students run and read the tests without creating any. Controlled database and Ollama responses exercise the actual route, prompt builder, document reader, and template. These checks verify implementation changes and normal behavior; live-model resistance is a separate observation.
+
+The Dockerfile now includes the supplied tests. pytest is installed only in the current teaching container by the documented command; pinned application requirements are unchanged. All starter application Python and templates remain unchanged, so the assigned fixes are still student work. Later session and SQL labs retain and recheck the Week 3 defenses. The instructor authorized publishing this revision to UW-INFO-310/huskyhub on October 20. The newer Week 2 edits in commits 3840700 and 6f329a7 are preserved, with only the two sequencing references updated for AI in Week 3 and HTTPS in Week 4.
+
 Built locally on October 6, 2026. The instructor approved the nine-week plan and then authorized building the whole course for later editing. The subsequent instruction was to create **only a local folder with code**. The initial build created no Git repository or publication. The instructor subsequently authorized pushing to UW-INFO-310/huskyhub on October 6, 2026. Publication uses a separate checkout and preserves destination initial commit `8d478479714a185713ca7f30f8a61ac682a0a547`; the original local course folder and both source clones remain separate. No Spring or Summer source repository is modified.
 
 ## Source Baseline
@@ -9,7 +19,7 @@ Built locally on October 6, 2026. The instructor approved the nine-week plan and
 - Spring weekly heads were also inspected. Full refs are recorded in [SOURCE_MANIFEST.json](SOURCE_MANIFEST.json). The repositories' newest shared commit in Summer history is `c3c4c552dd49ba0a2f878b01f1c780e11064ae43`; Summer does not inherit all Spring June corrections.
 - Spring main supplies the vulnerable Flask/MySQL/nginx starter, pinned requirements, seed accounts, nine-week sequence, GPL license, and March GPA fix `0f5fff3`. Most Summer application files are identical; its useful newer changes are mainly instructional.
 
-## Weekly Sources and Adaptations
+## Original October 6 Weekly Sources and Adaptations
 
 | Autumn week | Kept from Spring | Selected from Summer / Autumn adaptation |
 |---|---|---|

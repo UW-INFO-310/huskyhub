@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS documents (
 
 -- ─────────────────────────────────────────
 -- Users
--- Passwords stored in plaintext (Week 3 vulnerability)
+-- Passwords stored in plaintext (Week 4 vulnerability)
 -- ─────────────────────────────────────────
 
 INSERT INTO users (user_id, username, first_name, last_name, email, password, role, approved) VALUES
@@ -178,7 +178,7 @@ INSERT INTO enrollments (student_id, course_id, quarter, status) VALUES
 
 -- ─────────────────────────────────────────
 -- Messages
--- Message bodies are rendered unescaped with | safe (Week 8 target).
+-- Message bodies are rendered unescaped with | safe (Week 9 target).
 -- Students inject their own payload; none is seeded here.
 -- ─────────────────────────────────────────
 
@@ -201,7 +201,7 @@ INSERT INTO messages (sender_id, recipient_id, subject, body, is_read) VALUES
 
 -- ─────────────────────────────────────────
 -- Advising Notes
--- Advising notes are rendered unescaped with | safe (Week 8 target).
+-- Advising notes are rendered unescaped with | safe (Week 9 target).
 -- Students inject their own payload; none is seeded here.
 -- ─────────────────────────────────────────
 

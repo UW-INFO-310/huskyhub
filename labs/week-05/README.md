@@ -1,202 +1,230 @@
-# Week 5 Lab — Authentication: Sessions, Cookies, and Brute Force
+# Week 5 Lab — Logging, Error Handling, and Third-Party Risk
 
-**Quarter:** Autumn 2026 · **Required standalone lab**
-
-**Lecture:** Sessions and Authentication
-
-**Prerequisites:** Week 3 bcrypt and HTTPS; Week 4 structured logging. Continue your cumulative application.
+**Quarter:** Autumn 2026 · **Prerequisites:** Week 4 HTTPS; keep hashing and approval checks
 
 [Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
+
+**Lecture:** Application Layer, HTTP, Architecture, and Logging; Application Frontend, Backend, and 3rd Parties
 
 ---
 
 ## Overview
 
-HTTPS protects traffic, and bcrypt protects stored passwords. Neither prevents a user editing the identity cookies HuskyHub trusts, nor limits online password guesses. This week you demonstrate role and user impersonation, examine the transition into authenticated state, migrate the whole app to signed sessions, and implement account lockout. All nine steps below are required.
+This week you address two problems: verbose error messages that hand attackers a map of the application's internals, and the complete absence of security-relevant logging. You will trigger error conditions deliberately, document what leaks, harden error responses, implement structured logging, and audit the application's dependencies for known CVEs.
 
-Signed sessions, brute force, and lockout are **not** part of Week 3 or extra credit in Autumn. Additional detection alerts are available as an optional extension after this required lab. Midterm timing and due date are **TBD by the instructor**.
+---
 
 ## Tools
 
 | Tool | Purpose |
-|---|---|
-| Browser Developer Tools | Observe and modify cookies |
-| Python requests | Measure an online password-guessing attack |
-| Flask session / itsdangerous | Protect authenticated state against tampering |
-| MySQL CLI | Add counters and inspect lockout state |
-| Week 4 JSON logs | Observe successful and failed login attempts |
+|------|---------|
+| Browser | Trigger error conditions and observe responses |
+| Browser Developer Tools | Inspect error response bodies and headers |
+| Python logging module | Implement structured logging |
+| pip-audit | Scan dependencies for known CVEs |
+| Terminal | Read log output |
 
-Use `python3` on macOS/Linux and `python` on Windows. Install local scripting tools in a virtual environment as described in the troubleshooting guide. The Flask application already provides itsdangerous transitively; you do not need a new session backend.
+### Installing pip-audit by Platform
+
+**macOS / Linux:**
+```bash
+pip3 install pip-audit
+```
+
+**Windows (PowerShell or Git Bash):**
+```powershell
+pip install pip-audit
+```
+
+> If `pip` is not found, install Python from [python.org/downloads](https://www.python.org/downloads/) and ensure **Add Python to PATH** is checked during installation. Then reopen your terminal.
+
+> **macOS note:** If you get a permissions error, use `pip3 install --user pip-audit` or install via `brew install pip-audit`.
+
+---
 
 ## Steps
 
-### 1. Inspect Authentication Cookies
+### 1. Trigger Verbose Errors
 
-Log in as `jsmith` at `https://localhost`. In Developer Tools, record every cookie's name, value, domain, path, and HttpOnly/Secure/SameSite attributes. Compare these observations with Week 1.
+**Why Flask shows verbose errors by default — and what they expose:**
+HuskyHub registers a catch-all handler that returns a Python traceback to the browser. It exposes source file paths, line numbers, exception text, and sometimes SQL details. Flask development debugging can disclose still more information, but do not assume this particular response includes every local variable. This is extremely useful for a developer debugging on their own machine. It is equally useful for an attacker: a stack trace reveals the server's directory structure, the framework version, the names of database tables referenced in the failing query, and sometimes the contents of SQL queries — all without having to find a single vulnerability in the application logic itself. The URLs below intentionally trigger these conditions.
 
-Explain which values claim identity, role, or database ID. Cookies reside in the browser; a server needs an independent way to validate claims that a client can change.
+With the application running, **log in as `jsmith` first** (the grades route requires an authenticated session), then navigate to each of the following URLs and record the full response body for each:
 
-### 2. Demonstrate Role Forgery
+```
+https://localhost/grades?student_id='
+https://localhost/grades?student_id=1%20UNION%20SELECT%201,2,3%23
+https://localhost/nonexistent-page
+https://localhost/documents/download?file=/etc/passwd
+```
 
-Change `role=student` to `role=admin`. Reload and open `/admin/users`. Record the request and what access you gained. Inspect `is_admin()` in `flask/app/routes/admin.py`: what evidence does it actually check?
+The first two trigger database errors. In the starter, the catch-all Exception handler also converts the nonexistent route into a verbose 500; after your remediation that route must return a generic 404. The last URL behaves differently: it does **not** error — it returns HTTP 200 with the contents of `/etc/passwd`. That is a path-traversal / arbitrary-file-read disclosure, not an error condition. Record its response body and note how it differs from the error pages.
 
-Restore the original role and log out before the next test. This is cookie forgery, not guessing the admin password.
+For the first response, document:
+- The HTTP status code
+- Every internal detail exposed (stack traces, file paths, library versions, database errors, SQL queries)
+- Ensure that you still take a note of the other 3 pages, you will review them again later.
+---
 
-### 3. Demonstrate User Impersonation
+### 2. Analyze What an Attacker Learns
 
-Log in again as `jsmith` (ID 3). Change `user_id` to 4, then open `/grades` **without a student_id query parameter**. Record whose grades appear. The URL-based ownership flaw is a separate Week 6 exercise; this test isolates the trusted-cookie identity flaw.
+For the first error response, write a structured analysis: what was revealed, and how would an attacker use that specific piece of information in a subsequent attack? Be specific — "file paths were revealed" is not sufficient; "the path `/app/routes/grades.py` was revealed, telling the attacker the Flask routes are organized in an `app/routes/` directory which matches standard Flask project structure" is.
 
-Restore the original cookies and log out. Keep evidence from both role and identity forgery.
+---
 
-### 4. Examine the Authentication Transition and Session Fixation
+### 3. Implement a Global Error Handler
 
-Record cookies before login, after a successful login, and after logout. There may be an unrelated Flask flash-message cookie, but the starter's authentication is based on three unsigned identity cookies, not an authenticated session identifier.
+**What a global error handler does and what "least information" means:**
+Flask's `@app.errorhandler` decorator registers a function to be called whenever an exception of a given type propagates to the application level unhandled. By registering a handler for the base `Exception` class, you catch everything. The key principle here is *least information*: return only what the client needs to know (that an error occurred), and log everything else server-side where only authorized personnel can read it. `exc_info=True` in the log call tells the Python logging system to capture and include the full stack trace in the log entry — so you do not lose diagnostic information, you just stop broadcasting it to anonymous users.
 
-Classical **session fixation** requires an attacker-known identifier that the server continues treating as the same session after a victim logs in. A server-side session backend normally counters this by regenerating its identifier at authentication. Do not claim you observed that exploit in this starter: there is no such authentication identifier to fix. Explain the precondition and compare it with the forgery you actually demonstrated.
-
-In Steps 6–7 you will instead replace untrusted identity claims with authenticated, signed client-side state and discard pre-login state. Record the difference between those mechanisms rather than treating every cookie as a server-side session ID.
-
-### 5. Script and Measure a Brute Force Attack
-
-First watch the POST to `/login` in the browser Network tab. A wrong password should return 200 with the generic login error; a correct password should return 302 with a Location leading to the home page. Examine the POST itself, not the 200 obtained after following a redirect.
-
-Write `brute.py` to read `labs/week-05/wordlist.txt`, test username `tbrown`, and stop when login succeeds. The correct fixture password is after the first five guesses, so the same wordlist will later demonstrate lockout. Baseline the unprotected attack **before** adding counters.
-
-Use the following request pattern and add your own loop, attempt counter, timing, and output:
+In `flask/app/__init__.py`, replace the current error handler with one that returns a generic response:
 
 ```python
-import requests
+from werkzeug.exceptions import HTTPException
 
-TARGET = "https://localhost/login"
-r = requests.post(
-    TARGET,
-    data={"username": "tbrown", "password": candidate},
-    allow_redirects=False,
-    verify=False,  # controlled local self-signed lab certificate only
-    timeout=10,
-)
+@app.errorhandler(Exception)
+def handle_error(e):
+    if isinstance(e, HTTPException):
+        return {"error": e.name}, e.code
+    app.logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return {"error": "An unexpected error occurred."}, 500
+
+@app.errorhandler(404)
+def not_found(e):
+    return {"error": "Not found."}, 404
 ```
 
-`candidate` is the current wordlist entry, which you define in your loop. Skip empty lines. Confirm success using both status 302 and the expected Location; treat unexpected status codes as errors to investigate. Do not target `http://`: its TLS redirect is not a login result. Browser certificate trust does not necessarily configure Python requests.
+Rebuild and re-trigger the URLs from Step 1. Confirm the exception/404 responses do not expose internal details. The file-download disclosure still returns 200: generic error handling does not authorize files. Document it and carry that finding to Week 7 rather than claiming this handler fixes it.
 
-Run from the course root:
+---
 
-```bash
-python3 brute.py
-```
+### 4. Configure Structured Logging
 
-On Windows use `python brute.py`. Record attempts, elapsed time, approximate requests per second, and failed-login records from Week 4. bcrypt deliberately slows password checks, so do not assume a particular guessing speed.
+**Why structured (JSON) logs are superior to plain text logs:**
+A plain text log entry like `ERROR 2025-01-15 login failed for jsmith` is readable by a human but difficult to query programmatically. When you have millions of log entries and need to find all failed logins by a specific user within a time window, plain text requires fragile string parsing. JSON-formatted logs can be indexed and queried by any log aggregation system (Splunk, Elasticsearch, CloudWatch) without custom parsing. The `LogRecord` object that Python passes to the `format()` method contains all available information about the log event — the `hasattr` checks allow you to include optional context fields (like `user` and `endpoint`) only when the code that generated the log event explicitly attached them.
 
-### 6. Migrate the Whole Application to Signed Sessions
-
-Flask's default session stores serialized, **readable but signed** data in a client cookie. Itsdangerous verifies the signature before trusting it. Signing protects integrity; it does not encrypt the values or prevent replay of an already stolen valid cookie. Avoid storing passwords or other secrets in it. The pinned Flask version's default digest is SHA-1 with HMAC; do not describe it as encrypted or as a SHA-256 configuration you never set.
-
-Generate a strong secret **once**, using the command for your platform:
-
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-On Windows use `python -c` with the same quoted expression. Replace the fixture value of `FLASK_SECRET_KEY` in `.env`. Require that environment setting in `flask/app/__init__.py`; do not silently use the public development fallback for hardened sessions. Do not generate a different secret at every startup.
-
-Use Flask `session` assignments after credentials, approval, and any lockout checks succeed:
+Create `flask/app/logging_config.py`:
 
 ```python
-session['authenticated'] = user['username']
-session['role'] = user['role']
-session['user_id'] = user['user_id']
+import logging
+import json
+from datetime import datetime
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+        }
+        if hasattr(record, "user"):
+            log_entry["user"] = record.user
+        if hasattr(record, "endpoint"):
+            log_entry["endpoint"] = record.endpoint
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
 ```
 
-Keep Week 3's bcrypt verification and Week 4's logging. Complete this checklist:
+Configure Flask to use this formatter and write logs to `/var/log/huskyhub/app.log` inside the container. Create `logs/` in the course root (`mkdir -p logs` in Terminal/Git Bash; `New-Item -ItemType Directory -Force logs` in PowerShell). Add `./logs:/var/log/huskyhub` to the existing Flask service volumes; retain uploads. Set the application logger and file handler to INFO so INFO records are not filtered, replace duplicate default handlers as needed, and create the log directory before opening the file. Configure logging before routes are used. Do not log passwords or entire cookies.
 
-- Import `session` wherever you use it.
-- Replace the three login `set_cookie` calls with signed session state; return the login redirect normally.
-- Change logout to clear the session. Delete the old identity cookies during migration so stale browser values do not confuse testing.
-- Replace identity/role reads in `auth.py`, `grades.py`, `enrollment.py`, `messages.py`, `documents.py`, `admin.py`, `chatbot.py`, and the home route in `__init__.py` with `session.get(...)`. Retain legitimate request parameters; a grades URL's `student_id` is not a cookie read.
-- Update `templates/base.html`, whose navbar and admin links also read cookies. Flask exposes `session` to Jinja automatically.
-- Set `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SECURE=True`, and `SESSION_COOKIE_SAMESITE='Lax'`; HTTPS from Week 3 is required for the Secure cookie.
-- Search across routes **and templates** for remaining identity reads from `request.cookies`; none should remain. Raw cookie access by Flask's own session machinery is expected.
+Use `extra={"user": username, "endpoint": request.path}` on authentication/authorization events. Exception records can lack a user; the formatter deliberately treats these context fields as optional. Preserve HTTP exception codes, including the 403 responses you will introduce in Week 7.
 
-Recreate/rebuild Flask, log in, and confirm one signed session drives all normal pages and the navbar. It may look encoded, but its data is not secret. Tamper with one character and verify the authenticated state is rejected.
+---
 
-### 7. Clear Pre-Login State Before Establishing Identity
+### 5. Add Security-Relevant Log Events
 
-Place `session.clear()` after successful credential/approval/lockout verification and before writing authenticated session values. Check that this ordering preserves Week 4 log events and that logout also clears state.
+**What makes a log event "security-relevant" and why log levels matter:**
+Security-relevant events are those that indicate something worth investigating: a successful authentication (establishes a timeline of who logged in and when), a failed authentication (establishes whether a brute force attempt is in progress), and an authorization denial (establishes whether a user is attempting to access resources beyond their permissions). Log levels — DEBUG, INFO, WARNING, ERROR — are not just labels; monitoring systems are typically configured to alert on WARNING and above. Using WARNING for failed logins means a spike in warnings can trigger an automatic alert before a human notices.
 
-Record the pre-login and post-login state. Log in as one account, log out, and log in as another; no role or identity should carry over. After a Flask restart, a valid session signed with the same secret should still work.
+Add log statements to the following locations in the codebase:
 
-This is an authenticated-state transition for a signed client-side cookie. It does **not** rotate a server-side identifier or revoke copies of a previously valid signed cookie. Explain why replay of a stolen cookie remains possible until expiry or a separate revocation control, and how HTTPS/HttpOnly reduce theft opportunities. Keep the classical fixation comparison from Step 4 in your report.
+| Event | Level | Location |
+|-------|-------|----------|
+| Successful login | INFO | `auth.py` login route |
+| Failed login attempt | WARNING | `auth.py` login route — include the username attempted |
+| Access to a resource without authorization | WARNING | Any route that checks the role cookie |
+| Unhandled exception | ERROR | Global error handler (already done in Step 3) |
 
-### 8. Implement Account Lockout
+`current_app` is the Flask object that exposes the logger inside a route. Make sure it is included in the import at the top of `auth.py`:
 
-Add these columns to the running users table, using the MySQL CLI from the course root:
+```python
+from flask import Blueprint, current_app, request, redirect, url_for, render_template, make_response
+```
+
+If `current_app` is missing from the import, login will throw a `NameError` and return a 500 error on every POST.
+
+---
+
+### 6. Verify Log Output
+
+Trigger each of the four log events. Then read the log file:
 
 ```bash
-docker compose exec huskyhub-db mysql -u user -psupersecretpw huskyhub
+docker exec -it huskyhub-flask cat /var/log/huskyhub/app.log
 ```
 
-```sql
-ALTER TABLE users
-  ADD COLUMN failed_attempts INT NOT NULL DEFAULT 0,
-  ADD COLUMN lockout_until DATETIME NULL;
+Paste at least one log entry per event type in your report. Confirm every record has timestamp, level, message, and module; user/endpoint appear when the log call supplies them. Show an exception record with its server-side traceback while its client response stays generic.
+
+---
+
+### 7. Audit Dependencies
+
+**What a CVE is and what pip-audit checks:**
+A CVE (Common Vulnerabilities and Exposures) is a standardized identifier for a publicly disclosed security vulnerability in a software component. The National Vulnerability Database (NVD) maintains a searchable registry of CVEs with severity scores (CVSS) and descriptions. `pip-audit` compares the versions of packages listed in your requirements file against the NVD and the Python Packaging Advisory Database (PyPA). It does not analyze your code — it only checks whether the versions you have installed are known to be vulnerable. A clean audit result does not mean your code is secure; it means your dependencies have no *known published* vulnerabilities at this version.
+
+Run pip-audit against the application's requirements file:
+
+**macOS / Linux:**
+```bash
+pip-audit -r flask/requirements.txt
 ```
 
-Inspect the schema first and do not repeat ADD COLUMN if it already exists. Also add both columns to the users table definition in `database/init.sql`, so resetting Docker volumes leaves a schema compatible with your hardened login. Keep plaintext fixture data there as the migration input and rerun your Week 3 hashing migration after a reset.
-
-Implement the login logic yourself:
-
-1. Retrieve the account and retain its approval restriction. Unknown, unapproved, wrong-password, and locked-account cases return the same generic client error.
-2. If lockout_until is still in the future, reject without checking the password.
-3. Clear expired lockout state before counting a new failure, so the account can recover after 15 minutes.
-4. Increment and persist failed_attempts for an existing eligible account after a wrong password. At five failures, set a 15-minute lockout using the database's clock.
-5. On a valid, approved login, reset counters and lockout state; clear pre-login session state, then establish signed identity.
-6. Preserve security log events without logging passwords or signed cookie contents.
-
-Do not give unknown users a different client response, and do not lock out unrelated accounts. Handle invalid input without raising an exception or bypassing bcrypt. Consider the denial-of-service tradeoff of an attacker deliberately locking other users' accounts.
-
-### 9. Verify All Required Defenses
-
-Record before/after evidence for each case:
-
-| Check | Expected hardened outcome |
-|---|---|
-| Old role/user_id cookies changed or supplied directly | Do not grant a different identity or role |
-| One character changed in signed session | Authenticated state rejected |
-| Correct approved credentials | Normal login and grades access |
-| pending1 or a new unapproved registration | Generic login failure |
-| Logout, then a normal request without copied cookies | Login required |
-| Switch accounts | No previous role/identity retained |
-| Restart Flask with the same secret | Existing valid session remains usable |
-| Re-run wordlist against an unlocked tbrown | Five failures trigger lockout; later correct password fails during lockout |
-| Expired lockout / successful permitted login | Account recovers and counters reset |
-| Wrong password, nonexistent user, locked user | Same generic error, no traceback |
-
-To repeat lockout tests without resetting all course work, clear just the test account in MySQL:
-
-```sql
-UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE username = 'tbrown';
+**Windows:**
+```powershell
+pip-audit -r flask/requirements.txt
 ```
 
-Inspect code and seed schema for reset compatibility. If you test an actual volume reset, back up evidence first and rerun password migration before testing login. A copied valid signed session is still replayable: report that limitation instead of claiming logout or signing alone provides server-side revocation.
+Record every finding: CVE identifier, affected package, installed version, fixed version, and a one-line description.
+
+---
+
+### 8. Research the Highest-Severity CVE
+
+**What a CVSS score measures:**
+The Common Vulnerability Scoring System (CVSS) assigns each vulnerability a score from 0 to 10 based on a standardized vector that captures the attack vector (network vs. local), the complexity of the attack, whether authentication is required, and the impact on confidentiality, integrity, and availability. A score above 9.0 is Critical — it typically means the vulnerability can be exploited remotely, without authentication, and results in full system compromise. Understanding the CVSS vector string (e.g., `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`) lets you reason about exploitability without reading the full advisory.
+
+Select the highest-severity CVE from your audit. Look it up at [nvd.nist.gov](https://nvd.nist.gov). Document:
+- CVSS score and vector string
+- Attack vector (network / adjacent / local)
+- Whether authentication is required to exploit it
+- Whether a patched version exists
+- The specific impact it would have on the HuskyHub application
+
+---
 
 ## Write-Up Questions
 
-**Q1.** Explain session fixation and its attacker precondition. How does clearing pre-login state help your actual Flask implementation, and why is this different from rotating a server-side session ID? What does signing fail to prevent?
+**Q1.** What is the principle of least information in the context of error handling? How does your global error handler implement this principle, and why is this different from "security through obscurity"?
 
-**Q2.** Why do wrong-password, nonexistent-user, and locked-account cases share a generic error? Explain the enumeration and lockout tradeoffs.
+**Q2.** Paste one JSON log entry for each of your four log event types. Explain why each field in the structured format is useful for incident response.
 
-**Q3.** Where would MFA intervene in the login flow, and why would it not eliminate the need for password hashing, safe sessions, and account lockout?
+**Q3.** The lecture covered third-party risk. What is a software supply chain attack? How does the SolarWinds breach illustrate that dependency risk extends beyond known CVEs in publicly listed packages?
+
+---
 
 ## Hacker Mindset Prompt
 
-- **Contrarian:** What was wrong with trusting a role cookie, and how does signing change that trust boundary?
-- **Committed:** Compare bcrypt's offline protection with account lockout's online protection. What does each leave unaddressed?
-- **Creative:** Explain credential stuffing and password spraying. Which detection or prevention control would you add, and why?
+Verbose error messages do reconnaissance for the attacker at zero cost. Every stack trace is a map of the application internals. Every database error message is a hint about the schema.
 
-## Optional Extension
+Reflect on:
 
-After the required lab, use [Attack-Detection Logging](OPTIONAL_DETECTION.md) to enrich your Week 4 logs. Its additional alerts are optional and do not replace any required authentication step.
+- **Contrarian:** A developer adds verbose errors to help with debugging. How does the attacker benefit more from this decision than the developer does?
+- **Committed:** An attacker who discovers a vulnerable dependency in a target application does not stop at reading the CVE. Describe the exact steps they would take from discovery to exploit in the HuskyHub context.
+- **Creative:** Logging is a double-edged sword — it can also be used *against* an application. How could an attacker abuse a logging system itself as an attack vector? Research "Log4Shell" and explain how it fits this idea.
 
-## Submission Checklist
 
-Submit the four-section report in [LAB_GUIDE.md](../../LAB_GUIDE.md), the cookie/transition evidence, brute.py and measurements, before/after lockout results, changed route/template/schema files or a diff, and normal-use verification. Mark optional alerts separately. Due date, points, and LMS destination are **TBD by the instructor**.
+## Submission checklist
+
+Submit the four-section report described in [LAB_GUIDE.md](../../LAB_GUIDE.md), with the required step evidence, your answers/reflections, and source files or a readable diff for changes you made. Include normal-use checks after each remediation. Due date, points, and LMS destination are **TBD by the instructor**. Mark optional work separately.

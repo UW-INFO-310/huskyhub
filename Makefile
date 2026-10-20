@@ -18,7 +18,7 @@ logs:
 shell-db:
 	docker compose exec huskyhub-db sh -c 'exec mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE"'
 
-# Native Ollama must already be installed and running; see Week 9 pre-lab.
+# Native Ollama must already be installed and running; see Week 3 pre-lab.
 ai-setup:
 	ollama pull llama3.2
 	docker compose up -d --build huskyhub-flask

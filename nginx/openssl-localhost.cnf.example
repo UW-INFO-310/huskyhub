@@ -1,4 +1,4 @@
-# Week 3 alternative for OpenSSL/LibreSSL versions without -addext.
+# Week 4 alternative for OpenSSL/LibreSSL versions without -addext.
 # Only used when the student generates the local self-signed certificate.
 [req]
 prompt = no

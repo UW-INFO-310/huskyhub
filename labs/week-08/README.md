@@ -1,16 +1,16 @@
-# Week 8 Lab — XSS, Bug Bounty, and Automated Testing
+# Week 8 Lab — SQL Injection and OWASP Top 10
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Weeks 3–7 cumulative app; preserve AI output target until Week 9
+**Quarter:** Autumn 2026 · **Prerequisites:** Weeks 3–7; current AI fixes, bcrypt, signed sessions, logging, and authorization
 
 [Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
 
-**Lecture:** XSS and Testing Web Services with SAST and DAST; Manual Testing and Hardening
+**Lecture:** Threat Modeling, STRIDE, and DREAD; OWASP Top 10 and SQL Injection
 
 ---
 
 ## Overview
 
-Stored XSS is present in two places: the messaging system renders message bodies with `| safe`, and advising notes do the same. This week you exploit both, run OWASP ZAP against the full application, and compare automated tool findings against everything you have found manually across all eight weeks. You will then remediate XSS through output encoding and implement a Content Security Policy.
+SQL injection is present in the login form, the grades search endpoint, and the enrollment search endpoint. This week you will apply STRIDE and DREAD to formally model the threat landscape, then exploit each injection point using manual payloads and sqlmap. You will remediate all injection points with parameterized queries and verify the fix.
 
 ---
 
@@ -18,218 +18,227 @@ Stored XSS is present in two places: the messaging system renders message bodies
 
 | Tool | Purpose |
 |------|---------|
-| Browser + Developer Tools | Exploit and observe XSS payloads |
-| OWASP ZAP | Automated DAST scanning |
-| pytest | Write automated regression tests for XSS |
+| Browser / Burp Suite | Manual injection testing |
+| sqlmap | Automated SQL injection discovery and exploitation |
+| MySQL CLI | Verify database state and confirm exploitation results |
+| Flask source code | Implement parameterized query remediation |
 
-**Download OWASP ZAP:** [zaproxy.org/download](https://www.zaproxy.org/download/)
+### Installing sqlmap by Platform
 
-ZAP is available for macOS, Windows, and Linux. Download the installer for your platform.
+**macOS:**
+```bash
+brew install sqlmap
+# or
+pip3 install sqlmap
+```
 
-### Platform Notes
+**Linux:**
+```bash
+pip3 install sqlmap
+# or
+sudo apt install sqlmap
+```
 
-> **macOS note:** If ZAP does not open after installation, right-click the `.app` file → Open → confirm you want to open it (macOS Gatekeeper restriction on unsigned applications).
+**Windows:**
+```powershell
+pip install sqlmap
+```
 
-> **Windows note:** Launch ZAP from the Start menu or desktop shortcut. Accept the JRE prompt if it appears — ZAP requires Java, which the installer bundles.
+> After installation, verify with `sqlmap --version`. On Windows, if `sqlmap` is not found after install, try `python -m sqlmap --version` or run it via Git Bash.
 
 ---
 
 ## Steps
 
-### 1. Test Messaging for Stored XSS
+### 1. Complete a STRIDE Threat Model
 
-**What `| safe` does in Jinja2 and why it creates an XSS vulnerability:**
-Jinja2, the templating engine Flask uses, automatically escapes HTML characters in variables by default. When you render `{{ m.body }}`, Jinja2 converts `<` to `&lt;` and `>` to `&gt;`, so a script tag becomes visible text rather than executable HTML. The `| safe` filter disables this escaping, telling Jinja2 "I have already sanitized this value, render it as raw HTML." The application uses `| safe` to allow message formatting, but it does not sanitize user input before storage. The result: any user can store a `<script>` tag in the database, and Jinja2 will render it as live HTML in every recipient's browser. The script executes with the privileges of the victim's session — it can read cookies, make authenticated requests, or exfiltrate data.
+**What STRIDE is and how to use it:**
+STRIDE is a threat modeling framework developed by Microsoft that organizes threats into six categories: Spoofing (impersonating someone else), Tampering (modifying data or code), Repudiation (denying you performed an action), Information Disclosure (exposing data to unauthorized parties), Denial of Service (making the system unavailable), and Elevation of Privilege (gaining access beyond your authorization level). You apply STRIDE systematically to each component of the system architecture, asking "how could an attacker achieve this threat category against this component?" The value is comprehensiveness: you are forced to consider every category rather than just the vulnerabilities that happen to be most familiar.
 
-Log in as `jsmith`. Navigate to `/messages`. In the **Compose** form, select any recipient and enter the following in the **Message** body:
+Using the application architecture (nginx, Flask, MySQL, AI chatbot), complete a STRIDE analysis. For each of the six categories, identify at least one threat per major component.
 
-```html
-<script>alert(document.cookie)</script>
+Format as a table:
+
+| Component | Spoofing | Tampering | Repudiation | Info Disclosure | DoS | Elevation of Privilege |
+|-----------|----------|-----------|-------------|----------------|-----|------------------------|
+| nginx | ... | ... | ... | ... | ... | ... |
+| Flask app | ... | ... | ... | ... | ... | ... |
+| MySQL | ... | ... | ... | ... | ... | ... |
+| AI chatbot | ... | ... | ... | ... | ... | ... |
+
+---
+
+### 2. Score Your Top Threats with DREAD
+
+**What DREAD scoring produces and how to use the output:**
+DREAD scores each threat across five dimensions to produce a numerical priority ranking. The purpose is not false precision — a score of 12 is not meaningfully different from 11 — but forcing a structured comparison between threats so you can make a defensible argument for which ones to fix first. In a real organization, security remediation competes with feature development for engineering time. A DREAD-scored threat model gives a security team language to justify prioritization to non-technical stakeholders.
+
+Select the five highest-priority threats from your STRIDE table. Score each using DREAD:
+
+| Dimension | Score 1 | Score 2 | Score 3 |
+|-----------|---------|---------|---------|
+| **D**amage | Minimal | Individual/limited | Catastrophic/many users |
+| **R**eproducibility | Difficult | Repeatable with effort | Trivially reproducible |
+| **E**xploitability | Expert only | Some skill required | No skill required |
+| **A**ffected Users | Few | Many | All |
+| **D**iscoverability | Hard to find | Findable with research | Obvious |
+
+Rank by total score. This ranking should inform which vulnerabilities you fix first.
+
+---
+
+### 3. Test the Current Login Query for SQL Injection
+
+Read your cumulative auth.py first. After Week 4 it should retrieve an approved account by username and verify bcrypt separately in Python; after Week 6 it also applies lockout. It may still interpolate username into SQL, which is this week's target.
+
+Compare an ordinary username with these MySQL comment probes:
+
+```text
+' OR '1'='1' #
+admin'#
 ```
 
-Send the message. Log in as the recipient in a second browser session and view the inbox. Document whether the script executes and what it displays. Your Week 5 HttpOnly session may make document.cookie empty: an alert still proves JavaScript execution, while the empty cookie string shows a different defense working.
+MySQL # comments the rest of the query. Unlike --, it does not require a trailing whitespace character. In a URL parameter, encode it as %23 so the browser does not treat it as a fragment; a form body handles encoding for you.
+
+Try a wrong password first, then explain the outcome using your SQL query and bcrypt/lockout checks. **Do not expect an arbitrary password to bypass bcrypt**. A tautology can change the returned account or remove an SQL approval condition, but independent Python credential checks still matter. Use a known fixture password only to examine the account lookup result, and clear test lockout counters as needed. Authenticated identity must come from the retrieved account, not the raw submitted payload. Do not restore plaintext comparison or unsigned cookies to reproduce the older lab's login bypass.
+
+Document actual responses, server-side evidence, and the remaining SQL vulnerability. You will obtain unambiguous injection evidence at the still-vulnerable search endpoints next.
 
 ---
 
-### 2. Test Advising Notes for Stored XSS
+### 4. Test the Grades Search Endpoint
 
-**Why an `onerror` attribute on an `img` tag is effective as an XSS vector:**
-The `<img>` tag with an invalid `src` triggers the `onerror` event handler because the browser attempts to load the image, fails (since `src=x` is not a valid image URL), and executes whatever JavaScript is in `onerror`. This bypasses filters that only look for `<script>` tags specifically. It also works in contexts where script tags are stripped but HTML attributes are not. The payload executes in the context of the page loading it — in this case, when an advisor views their notes about a student.
+**What a UNION attack does and why column count matters:**
+A UNION attack appends a second SELECT statement to the original query, causing the database to return rows from both queries in a single result set. For UNION to work, both SELECT statements must return the same number of columns with compatible data types. Inspect the current SELECT columns, then use a controlled mismatch to understand why the count matters. Start by trying — `UNION SELECT 1,2,3,4,5,6#` attempts a 6-column UNION. If the column count is wrong, the database returns an error. If it is correct, the database returns your injected row. Once the correct column count is found, you replace the integer placeholders with actual column names from tables you want to read.
 
-Log in as `mwilson` (advisor, password: `advisor123`). Navigate to `/messages/advising-notes`. Add a note for student ID 3 with the content:
-
-```html
-<img src=x onerror="alert('XSS in advising note: ' + document.cookie)">
+Navigate to `/grades` and use the search field. Enter:
+```
+%') UNION SELECT 1,2,3,4,5,6#
 ```
 
-Log in as `jsmith` and view `/messages/advising-notes`. Document whether the payload executes.
-
----
-
-### 3. Run OWASP ZAP Active Scan
-
-**What the difference is between DAST and manual testing:**
-Dynamic Application Security Testing (DAST) tools like ZAP interact with a running application from the outside — the same way an attacker would. ZAP sends a large library of known-bad inputs to every form and URL it discovers, then analyzes the responses for patterns that indicate vulnerabilities. It does not read your source code (that is SAST — Static Application Security Testing). ZAP's value is breadth: it can test hundreds of inputs per minute across every endpoint it finds, systematically. Its limitation is that it operates without understanding application logic — it cannot reason about multi-step flows, session context, or vulnerabilities that only appear under specific conditions. You will compare its findings to yours after the scan.
-
-Use ZAP's browser/proxy to log in to your local HTTPS app and configure an authenticated context/session for the protected pages. Accept the local certificate as needed. Confirm its spider reaches grades, messages, and advising notes before active scanning; an unauthenticated scan mainly sees the login page. Restrict scan scope to your local HuskyHub and back up test data first because active scanning can modify it. Start the authenticated scan and let it complete. Configure/test account lockout handling rather than assuming the scanner stays logged in indefinitely.
-
-Export the report: **Report → Generate Report → HTML**.
-
----
-
-### 4. Compare ZAP Findings to Manual Findings
-
-Create a table with three columns:
-
-| Finding | Found by ZAP | Found Manually (which week) |
-|---------|-------------|------------------------------|
-| SQL Injection (grades search) | ... | ... |
-| Stored XSS (messages) | ... | ... |
-| ... | ... | ... |
-
-For findings in only one column, explain why the other method missed it. Distinguish a historical vulnerability you already fixed in Weeks 3–7 from one still present during this scan; a current scan is not expected to rediscover a remediated issue. This comparison is the point of the exercise — neither method alone is sufficient.
-
----
-
-### 5. Bug Bounty Exercise
-
-**What a bug bounty program is and how responsible disclosure works:**
-A bug bounty program is a formal agreement where an organization offers payment or recognition to security researchers who discover and responsibly disclose vulnerabilities. "Responsible disclosure" means reporting the vulnerability privately to the organization and giving them time to fix it before publishing details publicly. The research you have been doing in this course — methodical, documented, proof-of-concept — is exactly the format a real bug report requires. Today you apply that process to HuskyHub with no specific assignment: find something that was not in the lab instructions.
-
-Spend 20 minutes looking for any vulnerability not formally assigned in any prior week. This is deliberately open-ended. Document each finding with: endpoint, vulnerability type, proof-of-concept, and a severity rating with justification.
-
----
-
-### 6. Remediation — Output Encoding
-
-**What removing `| safe` accomplishes and why Jinja2's default is safe:**
-Jinja2 was designed with auto-escaping enabled as the default for HTML templates. When `| safe` is removed, Jinja2's template renderer intercepts the variable value before writing it to the output stream and replaces `<` with `&lt;`, `>` with `&gt;`, `"` with `&quot;`, and `&` with `&amp;`. These are HTML entities — the browser renders them as the visible characters `< > " &` but does not interpret them as HTML syntax. A `<script>` tag stored in the database becomes `&lt;script&gt;` in the HTML — the browser displays it as text, not code. No JavaScript executes. The key insight is that this is output encoding happening at render time, not input sanitization happening at storage time — the raw payload can stay in the database without issue as long as it is never rendered as raw HTML.
-
-Remove `| safe` from the assigned messaging/advising templates below. Leave chatbot.html's AI response target for Week 9 so its separate input source can be studied. Specifically:
-
-- `messages.html` — the `{{ m.body | safe }}` line
-- `advising_notes.html` — the `{{ n.note_content | safe }}` line
-
-Jinja2's auto-escaping will now encode `<script>` as `&lt;script&gt;` before rendering.
-
-Rebuild and verify that Step 1's payload is rendered as escaped text rather than executed.
-
----
-
-### 7. Implement a Content Security Policy
-
-**What CSP does at the browser level and what `default-src 'self'` means:**
-A Content Security Policy is an HTTP response header that tells the browser which sources it is allowed to load content from and execute scripts from. `default-src 'self'` establishes the baseline: all content must come from the same origin as the page. `script-src 'self'` specifically restricts JavaScript execution to scripts loaded from the same origin — inline scripts (those written directly in the HTML, including injected `<script>` tags) are blocked unless explicitly permitted. This means even if an attacker successfully injects a `<script>` tag into the page, the browser will refuse to execute it if CSP is present. CSP is a defense-in-depth layer: it does not fix the XSS vulnerability, but it limits the damage if the vulnerability exists or is reintroduced.
-
-HuskyHub loads Bootstrap from `cdn.jsdelivr.net`, so the CSP must explicitly allow that external source for scripts and styles — otherwise the site will lose all styling. Add the following header in `nginx/default.conf` inside the HTTPS server block:
-
-> **Builds on Week 3.** This goes in the HTTPS (port 443) `server` block you created in Week 3. Complete Week 3 first; keep the HTTP redirect and add this header to the HTTPS response block.
-
-```nginx
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net" always;
+If you receive a column count error, adjust the number of fields until the query succeeds. Then use a payload that extracts data:
+```
+%') UNION SELECT 1,username,1,password,email,role,1 FROM users#
 ```
 
-Reload nginx:
-
-```bash
-docker exec huskyhub-nginx nginx -s reload
-```
-
-In Developer Tools → **Network**, click any request and verify the `Content-Security-Policy` header is present in the response headers.
-
-The message is already escaped by Step 6, so reopening it should **not** produce a CSP violation. Verify encoding by inspecting its text/DOM separately.
-
-To test CSP itself without restoring the vulnerability, append a deliberate inline script element from the browser Console on your own page:
-
-```javascript
-const probe = document.createElement('script');
-probe.textContent = "alert('CSP verification')";
-document.body.appendChild(probe);
-```
-
-Record the Console violation naming script-src and the absence of the alert. Directly typing alert() in Developer Tools is privileged debugging and is not the same test. A blocked external fetch tests connection policy, not inline script execution.
-
-Check that Bootstrap resources still load. Existing inline style attributes and onclick confirmation handlers also conflict with this strict policy: move needed styles to local CSS and needed event handlers to local external JavaScript as part of your CSP exercise, preserving normal confirmations. Do not broadly allow unsafe-inline for scripts merely to hide violations. Document each legitimate UI check and any remaining policy issue.
+Document what data is returned.
 
 ---
 
-### 8. Write Automated XSS Regression Tests
+### 5. Test the Enrollment Search
 
-**What regression tests are for and what these tests specifically assert:**
-A regression test verifies that a bug that was fixed does not get reintroduced. Without automated tests, every code change requires a manual re-verification of every previously fixed vulnerability — which never happens in practice. These pytest tests automate that check: on every build, they send known XSS payloads to the vulnerable endpoints and assert that the injected payload is encoded in its content region rather than present as executable markup. The assertion checks for the *escaped* form (`&lt;script&gt;`) rather than simply for absence of the tag, because a blank response or an error would also pass an absence check — you want to confirm the content is present and escaped, not just that it is absent for some other reason.
-
-Create `flask/tests/test_xss.py` using pytest. The app runs on HTTPS with a self-signed certificate, so pass `verify=False` on all requests and suppress the resulting warning with `urllib3.disable_warnings()`:
-
-```python
-import pytest
-import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-BASE = "https://localhost"
-PAYLOADS = [
-    "<script>alert(1)</script>",
-    "<img src=x onerror=alert(1)>",
-]
-
-def login(username, password):
-    s = requests.Session()
-    r = s.post(f"{BASE}/login", data={"username": username, "password": password},
-               verify=False, allow_redirects=False, timeout=15)
-    assert r.status_code == 302
-    assert r.headers.get("Location") in ("/", f"{BASE}/")
-    check = s.get(f"{BASE}/", verify=False, allow_redirects=False, timeout=15)
-    assert check.status_code == 200 and username in check.text
-    return s
-
-def test_message_body_not_executed():
-    ...
-
-def test_advising_note_not_executed():
-    ...
-
-def test_reflected_search_not_executed():
-    ...
+Navigate to `/enrollment`. In the course name search field, enter:
+```
+%' OR 1=1#
 ```
 
-Write three test cases: one for message body XSS, one for advising notes XSS, and one for a URL-reflected parameter (e.g. the `/grades` `search` field — note this parameter is already auto-escaped because it is rendered without `| safe`, so this test confirms a non-vulnerable parameter stays safe rather than fixing a live bug). For each payload assert that the intended content is present in encoded form and its raw executable markup is absent in the relevant content region. Script and img payloads need different assertions; ordinary page script tags are not the attack. Confirm successful login, expected status/page, and the actual recipient/notes content first, so a redirect or empty page cannot pass. Use controlled test records and clean them up.
+Document whether additional records are returned beyond the current user's enrollments. The `%` character is the SQL wildcard for `LIKE` queries — it is included here because the enrollment search likely uses `LIKE '%search_term%'`, and prepending `%` ensures the injected OR clause appends correctly to the existing query structure.
 
-Run the tests:
+---
+
+### 6. Use sqlmap — Database Enumeration
+
+**What sqlmap is doing and what each flag instructs it to do:**
+sqlmap is an automated SQL injection tool. It probes a target endpoint with a large library of injection payloads, analyzes the responses to determine whether injection is possible, then systematically extracts data once it confirms a vulnerable parameter. `--dbs` instructs sqlmap to enumerate all accessible databases (the equivalent of `SHOW DATABASES` in MySQL). `--batch` suppresses interactive prompts and accepts default answers automatically — necessary for scripted or unattended runs. The `--cookie` flag provides your session cookie so sqlmap sends requests as an authenticated user — without it, the server would redirect to the login page on every request.
+
+Log in as jsmith over HTTPS, copy the current session cookie from Developer Tools, and replace the placeholder below with its full value. Do not submit the cookie in your report. Verify that the same signed session reaches your own grades (student_id=3); Week 7's authorization should reject other students' IDs. Old authenticated/role/user_id cookie examples no longer apply.
+
+Run sqlmap against this remaining search input. Keep the scan on your local app; the quoted ampersand must remain inside the URL:
 
 **macOS / Linux:**
 ```bash
-pip3 install pytest requests
-python3 -m pytest flask/tests/test_xss.py -v
+sqlmap -u "https://localhost/grades?student_id=3&search=info" \
+  --cookie="session=<paste-your-current-signed-cookie>" \
+  --dbs \
+  --batch
 ```
 
-**Windows:**
+**Windows (PowerShell):**
 ```powershell
-pip install pytest requests
-python -m pytest flask/tests/test_xss.py -v
+sqlmap -u "https://localhost/grades?student_id=3&search=info" --cookie="session=<paste-your-current-signed-cookie>" --dbs --batch
 ```
+
+**Windows (Git Bash):**
+```bash
+sqlmap -u "https://localhost/grades?student_id=3&search=info" \
+  --cookie="session=<paste-your-current-signed-cookie>" \
+  --dbs \
+  --batch
+```
+
+Record actual findings and any failure to reach the authenticated page. Do not classify an unauthenticated redirect as a clean scan.
+
+---
+
+### 7. Use sqlmap — Table and Data Extraction
+
+**macOS / Linux / Git Bash:**
+```bash
+# List tables
+sqlmap -u "https://localhost/grades?student_id=3&search=info" \
+  --cookie="session=<paste-your-current-signed-cookie>" \
+  -D huskyhub --tables --batch
+
+# Dump users table
+sqlmap -u "https://localhost/grades?student_id=3&search=info" \
+  --cookie="session=<paste-your-current-signed-cookie>" \
+  -D huskyhub -T users --dump --batch
+```
+
+Paste the output (redact actual password hash values). Note how many records were exposed.
+
+---
+
+### 8. Remediation — Parameterized Queries
+
+**How parameterized queries prevent injection at the database level:**
+In a parameterized query, the SQL statement structure is sent to the database engine as a separate step from the data values. The `%s` placeholder is a slot in the query template. `cursor.execute(query, (username,))` lets the driver bind the value with the appropriate escaping/type conversion, treating it as data rather than concatenating user text into SQL syntax. Connector implementations differ: this ordinary mysql-connector cursor need not use server-side prepared statements. The exercise is to stop interpolating untrusted values yourself; identifiers such as table names still require fixed choices rather than value placeholders.
+
+Replace every raw string-formatted SQL query in the application with parameterized queries.
+
+**Before (vulnerable):**
+```python
+query = f"SELECT * FROM users WHERE username = '{username}'"
+cursor.execute(query)
+```
+
+**After (safe):**
+```python
+query = "SELECT * FROM users WHERE username = %s"
+cursor.execute(query, (username,))
+```
+
+Apply this change to every input-dependent query in auth.py, grades.py, enrollment.py, messages.py, documents.py, admin.py, and chatbot.py, including the lockout updates you wrote in Week 6. Leave already constant queries constant. Keep bcrypt verification, account approval, signed sessions, logging, and authorization intact. LIKE patterns should be bound as values (build the wildcard pattern as data, not by interpolating it into SQL).
+
+Keep the Week 3 AI context, document-wrapper, and template fixes while changing chatbot queries. Rerun its provided tests after rebuilding, using the commands in [Week 3](../week-03/README.md#9-run-the-provided-automated-tests).
+
+---
+
+### 9. Verify the Remediation
+
+Repeat Steps 3–5 against the hardened application. Paste the sqlmap output showing that injection is no longer possible. Confirm crafted usernames do not alter lookup semantics, and that ordinary approved login, registration/approval, lockout, grades search, enrollment, messages, documents, and advisor/admin actions still work. SQL parameterization does not fix missing ownership checks or HTML encoding by itself. Use fresh sqlmap results rather than cached findings (flush its session for the remediation run).
 
 ---
 
 ## Write-Up Questions
 
-**Q1.** Explain the difference between stored XSS, reflected XSS, and DOM-based XSS. Which type did you exploit in Steps 1 and 2? Why is stored XSS considered more severe?
+**Q1.** Present your completed STRIDE table. For the login form specifically, write one concrete threat per STRIDE category.
 
-**Q2.** Explain how Content Security Policy prevents the execution of injected scripts. What is the limitation of CSP as the sole XSS defense?
+**Q2.** Explain how a parameterized query prevents SQL injection at a technical level. Why does escaping input without parameterization (e.g., `real_escape_string`) fail to provide equivalent protection?
 
-**Q3.** Document your bug bounty findings. For your most interesting finding, write a formal vulnerability report including: title, severity (with CVSS score justification), affected component, description, steps to reproduce, impact, and recommended remediation.
+**Q3.** Map the vulnerabilities you have found across all labs so far (Weeks 1–8) to the OWASP Top 10. For each applicable category, identify the OWASP entry and the corresponding HuskyHub vulnerability.
 
 ---
 
 ## Hacker Mindset Prompt
 
-XSS is often dismissed as a minor client-side issue. This is a serious underestimation. A committed attacker with arbitrary JavaScript execution in a victim's browser can steal sessions, log keystrokes, capture form submissions, pivot to the local network, and perform any action the victim can perform — silently.
+SQL injection has existed for over 25 years and remains in the OWASP Top 10 because it keeps appearing in production systems. The 2023 MOVEit breach, affecting thousands of organizations globally, was a SQL injection vulnerability.
 
 Reflect on:
 
-- **Contrarian:** The developer added `| safe` to the message template to "support rich formatting." What assumption did they make about who would be sending messages, and how did that assumption fail?
-- **Committed:** The bug bounty model pays researchers to find vulnerabilities before attackers do. What distinguishes authorized security research from unauthorized access, legally and ethically?
-- **Creative:** Even after removing `| safe` and adding a CSP, are there any remaining ways an attacker could abuse the messaging system? What would a defense-in-depth strategy look like beyond what you implemented?
+- **Contrarian:** sqlmap found the vulnerability and dumped the database in minutes. What does this say about the asymmetry between how long it takes to introduce a vulnerability and how long it takes to exploit it?
+- **Committed:** An attacker who dumps the users table via SQL injection has credentials and personal data. Describe the complete attack chain that follows: what do they do next, and what other systems might be affected beyond HuskyHub?
+- **Creative:** The database user in HuskyHub has read and write access to all tables. If you were designing the database access policy from scratch, how would you apply the principle of least privilege to reduce the damage a SQL injection attack could cause?
 
 
 ## Submission checklist

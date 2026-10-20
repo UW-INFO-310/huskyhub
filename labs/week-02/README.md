@@ -4,7 +4,7 @@
 
 **Lecture:** Intro to Networking, OSI Model, and MITM Attacks
 
-**Prerequisites:** Week 1; keep the HTTP starter for this lab. HTTPS begins in Week 3. Run commands from the huskyhub course folder.
+**Prerequisites:** Week 1; keep the HTTP starter for this lab. HTTPS begins in Week 4. Run commands from the huskyhub course folder.
 
 ---
 
@@ -12,7 +12,7 @@
 
 HuskyHub transmits all data over plain HTTP. This week you will use Wireshark to capture your own login traffic and see your credentials in cleartext. You will then use a second device to observe its cleartext cookies, demonstrate ARP spoofing, and impersonate its user without knowing their password.
 
-No remediation this week. The goal is to viscerally understand why encryption in transit matters before you implement it in Week 3.
+No remediation this week. The goal is to viscerally understand why encryption in transit matters before you implement it in Week 4. Week 3 examines AI security first.
 
 **Designed for independent work:** your laptop runs HuskyHub and the lab tools; a phone or another browser-capable device acts as the victim. Because the laptop is also the server, it can capture requests addressed to it even before ARP spoofing. Record cookie exposure/replay and changes to ARP mappings as separate observations. A true client–server–attacker MITM demonstration with a third endpoint is an optional activity the instructor will teach in lab; it is not required for this self-study lab.
 

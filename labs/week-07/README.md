@@ -1,16 +1,16 @@
-# Week 7 Lab — SQL Injection and OWASP Top 10
+# Week 7 Lab — Authorization, IDOR, and Offensive Tools
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Weeks 3–6; current bcrypt, signed sessions, logging, and authorization
+**Quarter:** Autumn 2026 · **Prerequisites:** required Week 6 signed sessions; Week 5 HTTP exception handling
 
 [Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
 
-**Lecture:** Threat Modeling, STRIDE, and DREAD; OWASP Top 10 and SQL Injection
+**Lecture:** Authorization and Permissions; Hackers, Offensive Techniques, and Malware
 
 ---
 
 ## Overview
 
-SQL injection is present in the login form, the grades search endpoint, and the enrollment search endpoint. This week you will apply STRIDE and DREAD to formally model the threat landscape, then exploit each injection point using manual payloads and sqlmap. You will remediate all injection points with parameterized queries and verify the fix.
+This week the focus shifts from who you are (authentication) to what you are allowed to do (authorization). HuskyHub has broken access controls at multiple points: students can view other students' grades by changing a URL parameter, advisor-only routes have no server-side role check, and some routes lack an independent permission check. Week 6 now protects identity/role against cookie forgery; it did not add ownership checks or protect every endpoint. You will exploit these manually, then use Burp Suite to automate your findings.
 
 ---
 
@@ -18,225 +18,196 @@ SQL injection is present in the login form, the grades search endpoint, and the 
 
 | Tool | Purpose |
 |------|---------|
-| Browser / Burp Suite | Manual injection testing |
-| sqlmap | Automated SQL injection discovery and exploitation |
-| MySQL CLI | Verify database state and confirm exploitation results |
-| Flask source code | Implement parameterized query remediation |
+| Browser Developer Tools | Manually manipulate URL parameters |
+| Burp Suite Community Edition | Intercept, modify, and replay HTTP requests |
+| curl | Test authorization checks from the command line |
+| Python requests | Automate IDOR enumeration |
 
-### Installing sqlmap by Platform
+**Download Burp Suite Community:** [portswigger.net/burp/communitydownload](https://portswigger.net/burp/communitydownload)
 
-**macOS:**
-```bash
-brew install sqlmap
-# or
-pip3 install sqlmap
-```
+Burp Suite is available for macOS, Windows, and Linux. Download the installer for your platform and follow the standard installation steps. No license is required for Community Edition.
 
-**Linux:**
-```bash
-pip3 install sqlmap
-# or
-sudo apt install sqlmap
-```
+### Platform Notes for curl
 
-**Windows:**
-```powershell
-pip install sqlmap
-```
+**macOS / Linux:** `curl` is pre-installed. Use it directly in Terminal.
 
-> After installation, verify with `sqlmap --version`. On Windows, if `sqlmap` is not found after install, try `python -m sqlmap --version` or run it via Git Bash.
+**Windows:** call `curl.exe` in PowerShell to avoid the legacy curl alias, or use Git Bash. Use `-k` only for this local self-signed certificate.
 
 ---
 
 ## Steps
 
-### 1. Complete a STRIDE Threat Model
+### 1. Map Authorization-Sensitive Endpoints
 
-**What STRIDE is and how to use it:**
-STRIDE is a threat modeling framework developed by Microsoft that organizes threats into six categories: Spoofing (impersonating someone else), Tampering (modifying data or code), Repudiation (denying you performed an action), Information Disclosure (exposing data to unauthorized parties), Denial of Service (making the system unavailable), and Elevation of Privilege (gaining access beyond your authorization level). You apply STRIDE systematically to each component of the system architecture, asking "how could an attacker achieve this threat category against this component?" The value is comprehensiveness: you are forced to consider every category rather than just the vulnerabilities that happen to be most familiar.
+**What makes an endpoint "authorization-sensitive":**
+An authorization-sensitive endpoint is any URL where the data returned or the action performed should be restricted to a specific user or role. The clearest indicator is an ID parameter in the URL or request body — `student_id`, `user_id`, `doc_id`. These IDs are object references: they tell the server which database record to retrieve. If the server retrieves whichever record the client requests without first confirming the client owns or has permission to access that record, every other user's data is one URL edit away.
 
-Using the application architecture (nginx, Flask, MySQL, AI chatbot), complete a STRIDE analysis. For each of the six categories, identify at least one threat per major component.
-
-Format as a table:
-
-| Component | Spoofing | Tampering | Repudiation | Info Disclosure | DoS | Elevation of Privilege |
-|-----------|----------|-----------|-------------|----------------|-----|------------------------|
-| nginx | ... | ... | ... | ... | ... | ... |
-| Flask app | ... | ... | ... | ... | ... | ... |
-| MySQL | ... | ... | ... | ... | ... | ... |
-| AI chatbot | ... | ... | ... | ... | ... | ... |
+Log in as `jsmith`. Compile a list of every URL containing an ID parameter: `student_id`, `user_id`, `doc_id`, `enrollment_id`, etc. This is your IDOR candidate list.
 
 ---
 
-### 2. Score Your Top Threats with DREAD
+### 2. Exploit IDOR on Grades
 
-**What DREAD scoring produces and how to use the output:**
-DREAD scores each threat across five dimensions to produce a numerical priority ranking. The purpose is not false precision — a score of 12 is not meaningfully different from 11 — but forcing a structured comparison between threats so you can make a defensible argument for which ones to fix first. In a real organization, security remediation competes with feature development for engineering time. A DREAD-scored threat model gives a security team language to justify prioritization to non-technical stakeholders.
+**What IDOR is and why it is distinct from other access control failures:**
+Insecure Direct Object Reference (IDOR) occurs when the application exposes a direct reference to an internal object (a database record, a file) in a way the user can manipulate, without verifying authorization before serving the object. The difference between IDOR and a broken login is the *level* at which the control fails: the login check verified you are a valid user, but no check verifies that this valid user is the owner of record number 5. The server trusts the number in the URL.
 
-Select the five highest-priority threats from your STRIDE table. Score each using DREAD:
+Navigate to your own grades:
+```
+https://localhost/grades?student_id=3
+```
 
-| Dimension | Score 1 | Score 2 | Score 3 |
-|-----------|---------|---------|---------|
-| **D**amage | Minimal | Individual/limited | Catastrophic/many users |
-| **R**eproducibility | Difficult | Repeatable with effort | Trivially reproducible |
-| **E**xploitability | Expert only | Some skill required | No skill required |
-| **A**ffected Users | Few | Many | All |
-| **D**iscoverability | Hard to find | Findable with research | Obvious |
+Now change the `student_id` to each value from 3 to 7. For each, record:
+- Whether the request succeeds
+- Whose record was returned
+- What grade data is exposed
 
-Rank by total score. This ranking should inform which vulnerabilities you fix first.
+Document whether any server-side check is performed to verify the requesting user owns the record.
 
 ---
 
-### 3. Test the Current Login Query for SQL Injection
+### 3. Exploit Broken Access Control on Admin Routes
 
-Read your cumulative auth.py first. After Week 3 it should retrieve an approved account by username and verify bcrypt separately in Python; after Week 5 it also applies lockout. It may still interpolate username into SQL, which is this week's target.
-
-Compare an ordinary username with these MySQL comment probes:
-
-```text
-' OR '1'='1' #
-admin'#
+While logged in as `jsmith` (a student), directly navigate to each of these routes:
+```
+https://localhost/admin/users
+https://localhost/admin/grades
+https://localhost/admin/pending
 ```
 
-MySQL # comments the rest of the query. Unlike --, it does not require a trailing whitespace character. In a URL parameter, encode it as %23 so the browser does not treat it as a fragment; a form body handles encoding for you.
+For each route, document whether access is granted and what is exposed. They behave differently:
 
-Try a wrong password first, then explain the outcome using your SQL query and bcrypt/lockout checks. **Do not expect an arbitrary password to bypass bcrypt**. A tautology can change the returned account or remove an SQL approval condition, but independent Python credential checks still matter. Use a known fixture password only to examine the account lookup result, and clear test lockout counters as needed. Authenticated identity must come from the retrieved account, not the raw submitted payload. Do not restore plaintext comparison or unsigned cookies to reproduce the older lab's login bypass.
+- `/admin/grades` has **no server-side authorization check at all** — in the starter it even lacks a login check. Test it in both a signed-in student session and a separate signed-out browser. You changed no cookies and sent no special headers; you simply navigated to a URL. This is broken access control via forced browsing.
+- `/admin/users` and `/admin/pending` **do** check the role. Your Week 6 migration should now read it from the signed session, so changing an old role cookie must no longer bypass them. Before this week they redirect a student home; your new authorization policy will return an explicit 403 instead. Do not undo Week 6 to make cookie forgery work again.
 
-Document actual responses, server-side evidence, and the remaining SQL vulnerability. You will obtain unambiguous injection evidence at the still-vulnerable search endpoints next.
+Document which routes enforce a check, which do not, and exactly what each exposes.
 
 ---
 
-### 4. Test the Grades Search Endpoint
+### 4. Set Up Burp Suite
 
-**What a UNION attack does and why column count matters:**
-A UNION attack appends a second SELECT statement to the original query, causing the database to return rows from both queries in a single result set. For UNION to work, both SELECT statements must return the same number of columns with compatible data types. Inspect the current SELECT columns, then use a controlled mismatch to understand why the count matters. Start by trying — `UNION SELECT 1,2,3,4,5,6#` attempts a 6-column UNION. If the column count is wrong, the database returns an error. If it is correct, the database returns your injected row. Once the correct column count is found, you replace the integer placeholders with actual column names from tables you want to read.
+**What Burp Suite is doing as a proxy and what "intercept" means:**
+Burp Suite positions itself between your browser and the server as an HTTP proxy. Your browser sends its requests to Burp, Burp forwards them to the server, receives the responses, and passes them back to your browser. This gives you full visibility into every request and response, and the ability to modify either before it reaches its destination. "Intercept mode" pauses each request, letting you read and edit it before clicking Forward to release it. HTTP History shows all captured traffic. Repeater lets you send saved requests to the server as many times as you want with arbitrary modifications — this is how you will systematically enumerate IDOR targets without clicking through the browser manually for each one.
 
-Navigate to `/grades` and use the search field. Enter:
-```
-%') UNION SELECT 1,2,3,4,5,6#
-```
+Configure your browser to proxy through Burp Suite:
+1. Open Burp Suite → **Proxy → Intercept → Open Browser**
+2. In the built-in browser, log in as jsmith at `https://localhost/login` first, then open `https://localhost/grades?student_id=3`
+3. In Burp, find the request in **Proxy → HTTP History**
+4. Right-click → **Send to Repeater**
 
-If you receive a column count error, adjust the number of fields until the query succeeds. Then use a payload that extracts data:
-```
-%') UNION SELECT 1,username,1,password,email,role,1 FROM users#
-```
-
-Document what data is returned.
+Use Burp's built-in browser to avoid changing your normal browser's proxy. If intercept is holding a request, forward it or turn interception off while browsing. HTTPS certificate setup and localhost proxy behavior depend on the browser; use Burp's current built-in-browser guidance before changing system proxy settings. If you do change a proxy, record and restore it afterwards.
 
 ---
 
-### 5. Test the Enrollment Search
+### 5. Automate IDOR Enumeration with Burp Repeater and Intruder
 
-Navigate to `/enrollment`. In the course name search field, enter:
-```
-%' OR 1=1#
-```
+**What Intruder does and what "payload positions" are:**
+Intruder is Burp's request automation tool. You mark a parameter value in the request as a "payload position" (using § markers) and provide a list of values to substitute in. Intruder then sends one request per payload value and records every response. For IDOR, you set the `student_id` as the payload position and use a sequential number list as the payload — Intruder effectively sends the same request 20 times with IDs 1 through 20, and you can scan the response lengths and status codes to identify which IDs returned real records versus errors.
 
-Document whether additional records are returned beyond the current user's enrollments. The `%` character is the SQL wildcard for `LIKE` queries — it is included here because the enrollment search likely uses `LIKE '%search_term%'`, and prepending `%` ensures the injected OR clause appends correctly to the existing query structure.
+In Burp Repeater, systematically change the `student_id` value from 1 to 15 and send each request. Record every student ID that returns a valid grade record with a name attached.
 
----
+Then use **Intruder** to automate this:
+1. Right-click the request in Repeater → **Send to Intruder**
+2. Highlight the `student_id` value → **Add §**
+3. Under **Payloads**, select **Numbers** from 1 to 20
+4. Start the attack and review results
 
-### 6. Use sqlmap — Database Enumeration
-
-**What sqlmap is doing and what each flag instructs it to do:**
-sqlmap is an automated SQL injection tool. It probes a target endpoint with a large library of injection payloads, analyzes the responses to determine whether injection is possible, then systematically extracts data once it confirms a vulnerable parameter. `--dbs` instructs sqlmap to enumerate all accessible databases (the equivalent of `SHOW DATABASES` in MySQL). `--batch` suppresses interactive prompts and accepts default answers automatically — necessary for scripted or unattended runs. The `--cookie` flag provides your session cookie so sqlmap sends requests as an authenticated user — without it, the server would redirect to the login page on every request.
-
-Log in as jsmith over HTTPS, copy the current session cookie from Developer Tools, and replace the placeholder below with its full value. Do not submit the cookie in your report. Verify that the same signed session reaches your own grades (student_id=3); Week 6's authorization should reject other students' IDs. Old authenticated/role/user_id cookie examples no longer apply.
-
-Run sqlmap against this remaining search input. Keep the scan on your local app; the quoted ampersand must remain inside the URL:
-
-**macOS / Linux:**
-```bash
-sqlmap -u "https://localhost/grades?student_id=3&search=info" \
-  --cookie="session=<paste-your-current-signed-cookie>" \
-  --dbs \
-  --batch
-```
-
-**Windows (PowerShell):**
-```powershell
-sqlmap -u "https://localhost/grades?student_id=3&search=info" --cookie="session=<paste-your-current-signed-cookie>" --dbs --batch
-```
-
-**Windows (Git Bash):**
-```bash
-sqlmap -u "https://localhost/grades?student_id=3&search=info" \
-  --cookie="session=<paste-your-current-signed-cookie>" \
-  --dbs \
-  --batch
-```
-
-Record actual findings and any failure to reach the authenticated page. Do not classify an unauthenticated redirect as a clean scan.
+> **Note:** Burp Suite Community Edition throttles Intruder attacks. This is expected — it will complete, just slowly.
 
 ---
 
-### 7. Use sqlmap — Table and Data Extraction
+### 6. Find a Second IDOR Endpoint
 
-**macOS / Linux / Git Bash:**
-```bash
-# List tables
-sqlmap -u "https://localhost/grades?student_id=3&search=info" \
-  --cookie="session=<paste-your-current-signed-cookie>" \
-  -D huskyhub --tables --batch
+Using Burp's history or by manually browsing, identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Strong candidates: `/documents/download` (references a file path directly), `/documents/delete` (`doc_id`), and `/enrollment/drop` (`enrollment_id`). Note that `/enrollment` and `/messages` now read your user_id from the **signed session** rather than a URL parameter. The old cookie-tampering path should already be closed; focus on client-controlled object references that still lack ownership checks.
 
-# Dump users table
-sqlmap -u "https://localhost/grades?student_id=3&search=info" \
-  --cookie="session=<paste-your-current-signed-cookie>" \
-  -D huskyhub -T users --dump --batch
-```
-
-Paste the output (redact actual password hash values). Note how many records were exposed.
+Document the endpoint, vulnerable parameter, and exposed data/action using only fictional fixture records you are allowed to alter. For document tests create a harmless file as each of two fixture users before comparing IDs. This second finding is required; implementing an additional ownership fix beyond the assigned grade/admin remediation may be included as an extension.
 
 ---
 
-### 8. Remediation — Parameterized Queries
+### 7. Remediation — Server-Side Authorization Decorator
 
-**How parameterized queries prevent injection at the database level:**
-In a parameterized query, the SQL statement structure is sent to the database engine as a separate step from the data values. The `%s` placeholder is a slot in the query template. `cursor.execute(query, (username,))` lets the driver bind the value with the appropriate escaping/type conversion, treating it as data rather than concatenating user text into SQL syntax. Connector implementations differ: this ordinary mysql-connector cursor need not use server-side prepared statements. The exercise is to stop interpolating untrusted values yourself; identifiers such as table names still require fixed choices rather than value placeholders.
+**What a Python decorator is and why this pattern is the right approach for authorization:**
+A decorator in Python is a function that wraps another function, adding behavior before or after the wrapped function runs. `@require_role('admin')` placed above a route function means "before executing this route, run the `require_role` check — if it fails, abort; if it passes, run the route as normal." The value of this pattern is consistency: rather than copying an `if role != 'admin': abort(403)` check into every protected route (and risking forgetting it), you define the check once and apply it as a decorator. `functools.wraps(f)` copies metadata from the original function to the wrapper so Flask's routing system can still identify the function correctly. `abort(403)` immediately terminates the request with an HTTP 403 Forbidden response.
 
-Replace every raw string-formatted SQL query in the application with parameterized queries.
+> **Builds on Week 6.** These decorators read the user's role and id from Flask's signed `session` (`session.get('role')`, `session.get('user_id')`), which assumes you completed Week 6's migration from plaintext cookies to signed sessions. If that migration is incomplete, finish Week 6 first. Do not fall back to forgeable identity cookies.
 
-**Before (vulnerable):**
+Create a reusable authorization decorator in `flask/app/auth_utils.py`:
+
 ```python
-query = f"SELECT * FROM users WHERE username = '{username}'"
-cursor.execute(query)
-```
+from functools import wraps
+from flask import request, redirect, url_for, abort, session
 
-**After (safe):**
-```python
-query = "SELECT * FROM users WHERE username = %s"
-cursor.execute(query, (username,))
-```
+def require_role(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            role = session.get('role', 'student')
+            if role not in roles:
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
-Apply this change to every input-dependent query in auth.py, grades.py, enrollment.py, messages.py, documents.py, admin.py, and chatbot.py, including the lockout updates you wrote in Week 5. Leave already constant queries constant. Keep bcrypt verification, account approval, signed sessions, logging, and authorization intact. LIKE patterns should be bound as values (build the wildcard pattern as data, not by interpolating it into SQL).
+def require_own_resource(student_id_param='student_id'):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('authenticated') or session.get('user_id') is None:
+                abort(401)
+            current_user_id = str(session.get('user_id'))
+            requested_id = request.args.get(student_id_param)
+            if requested_id is None:
+                requested_id = kwargs.get(student_id_param, current_user_id)
+            role = session.get('role', 'student')
+            if role not in ('advisor', 'admin') and str(requested_id) != current_user_id:
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+```
 
 ---
 
-### 9. Verify the Remediation
+### 8. Apply the Decorators
 
-Repeat Steps 3–5 against the hardened application. Paste the sqlmap output showing that injection is no longer possible. Confirm crafted usernames do not alter lookup semantics, and that ordinary approved login, registration/approval, lockout, grades search, enrollment, messages, documents, and advisor/admin actions still work. SQL parameterization does not fix missing ownership checks or HTML encoding by itself. Use fresh sqlmap results rather than cached findings (flush its session for the remediation run).
+Apply `@require_own_resource()` to `/grades`, preserving the normal no-parameter own-grades view. Apply `@require_role('admin')` to user management, approval, deletion, and pending-registration routes. Apply **only** `@require_role('advisor', 'admin')` to `/admin/grades`; stacking an admin-only decorator there would wrongly exclude advisors. Preserve Week 5 HTTP error codes so abort(403) reaches the client as 403, not 500. Log denials with user and endpoint. Decide and document signed-out behavior consistently.
+
+Rebuild and test.
+
+---
+
+### 9. Verify Remediation
+
+Repeat Steps 2 and 3 against the hardened application. Confirm:
+- Accessing another student's grades returns HTTP 403
+- Accessing admin routes as a student returns HTTP 403
+- `/grades` without a query still shows the student's own records
+- Legitimate access still works for advisors and admins
+- Unauthenticated requests are denied, with no internal traceback
+- Old unsigned role cookies do not bypass the signed-session policy
+
+Paste the HTTP responses in your report.
 
 ---
 
 ## Write-Up Questions
 
-**Q1.** Present your completed STRIDE table. For the login form specifically, write one concrete threat per STRIDE category.
+**Q1.** Define Insecure Direct Object Reference (IDOR) in your own words. Why does hiding the edit button in the UI fail to prevent IDOR? What is the only reliable place to enforce access control?
 
-**Q2.** Explain how a parameterized query prevents SQL injection at a technical level. Why does escaping input without parameterization (e.g., `real_escape_string`) fail to provide equivalent protection?
+**Q2.** Explain the difference between role-based access control (RBAC) and attribute-based access control (ABAC). Which model does your remediation implement? What scenario would require ABAC instead?
 
-**Q3.** Map the vulnerabilities you have found across all labs so far (Weeks 1–7) to the OWASP Top 10. For each applicable category, identify the OWASP entry and the corresponding HuskyHub vulnerability.
+**Q3.** Burp Intruder enumerated student IDs 1–20 in seconds. What would a script that automated this against a production application need to do to avoid triggering detection? What defenses would slow it down?
 
 ---
 
 ## Hacker Mindset Prompt
 
-SQL injection has existed for over 25 years and remains in the OWASP Top 10 because it keeps appearing in production systems. The 2023 MOVEit breach, affecting thousands of organizations globally, was a SQL injection vulnerability.
+IDOR is the simplest class of vulnerability to exploit — change a number, get someone else's data — yet it appears in major production systems continuously. Meta's 2021 data scraping incident, exposing 533 million records, was rooted in an access control failure exploitable through API enumeration.
 
 Reflect on:
 
-- **Contrarian:** sqlmap found the vulnerability and dumped the database in minutes. What does this say about the asymmetry between how long it takes to introduce a vulnerability and how long it takes to exploit it?
-- **Committed:** An attacker who dumps the users table via SQL injection has credentials and personal data. Describe the complete attack chain that follows: what do they do next, and what other systems might be affected beyond HuskyHub?
-- **Creative:** The database user in HuskyHub has read and write access to all tables. If you were designing the database access policy from scratch, how would you apply the principle of least privilege to reduce the damage a SQL injection attack could cause?
+- **Contrarian:** The application showed the correct data to the correct user in the UI. A student who only uses the UI would never notice this vulnerability. What does this say about the gap between "works correctly" and "is secure"?
+- **Committed:** A committed attacker who discovers an IDOR vulnerability does not stop at one record. Write a Python script (pseudocode is fine) that would exfiltrate the complete grade database using the IDOR you found.
+- **Creative:** IDOR becomes significantly harder to exploit if object IDs are not sequential integers. What alternative ID scheme would make enumeration impractical, and what are the tradeoffs?
 
 
 ## Submission checklist

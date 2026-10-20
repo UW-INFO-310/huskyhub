@@ -1,17 +1,17 @@
-# Optional Week 5 Extension — Attack-Detection Logging
+# Optional Week 6 Extension — Attack-Detection Logging
 
 **Quarter:** Autumn 2026 · **Optional** · **Grading: TBD by the instructor**
 
-Complete every required step in [Week 5](README.md) first. This extension draws on Summer's extra-credit wording but leaves authentication, brute force, and lockout in the required Autumn lab.
+Complete every required step in [Week 6](README.md) first. This extension draws on Summer's extra-credit wording but leaves authentication, brute force, and lockout in the required Autumn lab.
 
-Reuse your existing brute.py, lockout counters, and Week 4 JSON logs. Capture source IP, name threshold events, and record successful logins following repeated failures. The updated_failed_attempts variable below means your persisted counter after incrementing; connect it to your own implementation.
+Reuse your existing brute.py, lockout counters, and Week 5 JSON logs. Capture source IP, name threshold events, and record successful logins following repeated failures. The updated_failed_attempts variable below means your persisted counter after incrementing; connect it to your own implementation.
 
 These events are heuristics. Several failures do not prove an automated attack, and source IPs are meaningful only when they come through your trusted nginx proxy, which overwrites X-Real-IP. Do not describe a counter alone as a measured time-window detector.
 
 ### 1. Observe the Attack in Your Logs
 
 **Why your attack is already partly visible:**
-In Week 4 you added a WARNING-level log event for every failed login. Your brute
+In Week 5 you added a WARNING-level log event for every failed login. Your brute
 force script just generated one failed-login entry for every wrong password it
 tried — potentially dozens or hundreds of them. The raw material for detecting
 this attack already exists in your logs. The problem, as you are about to see, is
@@ -49,7 +49,7 @@ severity and can filter on named event types, so promoting these signals out of
 the WARNING noise is what turns your logs into a usable alarm.
 
 **2a. Carry the new fields through the formatter.**
-In Week 4 your `JSONFormatter` included optional fields (like `user` and
+In Week 5 your `JSONFormatter` included optional fields (like `user` and
 `endpoint`) only when the log call attached them. Add the same treatment for
 three new fields — `source_ip`, `event`, and `failed_attempts` — in
 `flask/app/logging_config.py`:
@@ -65,7 +65,7 @@ if hasattr(record, "failed_attempts"):
 
 **2b. Capture the source IP.**
 At the top of the login route, read the client's real IP address. nginx forwards
-it in the `X-Real-IP` header (configured back in Week 3); fall back to
+it in the `X-Real-IP` header (configured back in Week 4); fall back to
 `request.remote_addr` if the header is absent:
 
 ```python
@@ -73,7 +73,7 @@ source_ip = request.headers.get("X-Real-IP", request.remote_addr)
 ```
 
 **2c. Enrich the failed-login event.**
-Update your Week 4 failed-login WARNING so it includes the source IP:
+Update your Week 5 failed-login WARNING so it includes the source IP:
 
 ```python
 current_app.logger.warning(
@@ -84,7 +84,7 @@ current_app.logger.warning(
 
 **2d. Emit a distinct brute-force alert.**
 When a user's failed-attempt count reaches the lockout threshold (you implemented
-the counter in the required Week 5 lockout step), log a single CRITICAL event with a named `event` type
+the counter in the required Week 6 lockout step), log a single CRITICAL event with a named `event` type
 so it can be filtered out of the noise:
 
 ```python
@@ -137,4 +137,4 @@ one of these out of the log in a single query.
 
 Clear only the test account's lockout state, then run the required lab's wordlist. Show one threshold event with user, source_ip, and failed_attempts. Next clear that test state, deliberately enter three wrong passwords and then the correct password; show the success-after-failures WARNING recorded before the counter resets. Confirm normal login and generic errors still work.
 
-Explain the difference between detection and prevention, why success after failures deserves investigation rather than certainty, and how password spraying can evade per-account thresholds. Include the optional evidence and formatter/login diff as an appendix to the Week 5 report. No extra-credit point value is assumed.
+Explain the difference between detection and prevention, why success after failures deserves investigation rather than certainty, and how password spraying can evade per-account thresholds. Include the optional evidence and formatter/login diff as an appendix to the Week 6 report. No extra-credit point value is assumed.

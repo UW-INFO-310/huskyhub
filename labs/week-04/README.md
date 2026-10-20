@@ -1,16 +1,16 @@
-# Week 4 Lab — Logging, Error Handling, and Third-Party Risk
+# Week 4 Lab — Cryptography: Hashing Passwords and Enforcing HTTPS
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Week 3 HTTPS; keep hashing and approval checks
+**Quarter:** Autumn 2026 · **Prerequisites:** Week 2 packet-capture observations; continue your existing application and keep the Week 3 AI fixes
 
 [Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
 
-**Lecture:** Application Layer, HTTP, Architecture, and Logging; Application Frontend, Backend, and 3rd Parties
+**Lecture:** Introduction to Cryptography; Public Key Cryptography and PKI
 
 ---
 
 ## Overview
 
-This week you address two problems: verbose error messages that hand attackers a map of the application's internals, and the complete absence of security-relevant logging. You will trigger error conditions deliberately, document what leaks, harden error responses, implement structured logging, and audit the application's dependencies for known CVEs.
+In Week 2 you captured credentials in cleartext and stole a session cookie over an unencrypted connection. This week you fix both of those problems. You will replace plaintext password storage with bcrypt hashing, configure HTTPS using a self-signed certificate, and verify each remediation by re-running the Week 2 attacks and documenting the difference in outcome.
 
 ---
 
@@ -18,211 +18,277 @@ This week you address two problems: verbose error messages that hand attackers a
 
 | Tool | Purpose |
 |------|---------|
-| Browser | Trigger error conditions and observe responses |
-| Browser Developer Tools | Inspect error response bodies and headers |
-| Python logging module | Implement structured logging |
-| pip-audit | Scan dependencies for known CVEs |
-| Terminal | Read log output |
+| bcrypt (Python library) | Hash and verify passwords |
+| OpenSSL | Generate a self-signed TLS certificate |
+| Wireshark | Verify HTTPS traffic is no longer readable |
+| MySQL CLI | Inspect the database before and after hashing |
+| nginx config files | Enable HTTPS on the web server |
+| Docker Compose | Rebuild and redeploy |
 
-### Installing pip-audit by Platform
+### Platform Notes
 
-**macOS / Linux:**
-```bash
-pip3 install pip-audit
-```
+**OpenSSL:**
+- **macOS:** Pre-installed. Verify with `openssl version` in Terminal.
+- **Linux:** Pre-installed on most distributions. Install with `sudo apt install openssl` if missing.
+- **Windows:** OpenSSL is included with **Git for Windows**. Open Git Bash and verify with `openssl version`. If not present, download the installer from [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html).
 
-**Windows (PowerShell or Git Bash):**
-```powershell
-pip install pip-audit
-```
+**MySQL CLI:**
+- The MySQL client runs inside the Docker container — no local installation is needed. All MySQL commands in this lab use `docker exec` to connect to the container.
 
-> If `pip` is not found, install Python from [python.org/downloads](https://www.python.org/downloads/) and ensure **Add Python to PATH** is checked during installation. Then reopen your terminal.
-
-> **macOS note:** If you get a permissions error, use `pip3 install --user pip-audit` or install via `brew install pip-audit`.
+**Docker commands** work identically across all platforms in Terminal (macOS/Linux) or Git Bash / PowerShell (Windows).
 
 ---
 
 ## Steps
 
-### 1. Trigger Verbose Errors
+### 1. Observe Plaintext Passwords in the Database
 
-**Why Flask shows verbose errors by default — and what they expose:**
-HuskyHub registers a catch-all handler that returns a Python traceback to the browser. It exposes source file paths, line numbers, exception text, and sometimes SQL details. Flask development debugging can disclose still more information, but do not assume this particular response includes every local variable. This is extremely useful for a developer debugging on their own machine. It is equally useful for an attacker: a stack trace reveals the server's directory structure, the framework version, the names of database tables referenced in the failing query, and sometimes the contents of SQL queries — all without having to find a single vulnerability in the application logic itself. The URLs below intentionally trigger these conditions.
+**What `docker exec` does and why we use it here:**
+`docker exec` runs a command inside an already-running container. The `-it` flags combine `-i` (keep stdin open) and `-t` (allocate a terminal), which together give you an interactive shell session inside the container. We use this because the MySQL server is running inside the Docker container's isolated network — we use the bundled client so you do not need to install MySQL tools on your laptop. The command `mysql -u user -psupersecretpw huskyhub` connects to MySQL as the `user` account and immediately selects the `huskyhub` database.
 
-With the application running, **log in as `jsmith` first** (the grades route requires an authenticated session), then navigate to each of the following URLs and record the full response body for each:
-
-```
-https://localhost/grades?student_id='
-https://localhost/grades?student_id=1%20UNION%20SELECT%201,2,3%23
-https://localhost/nonexistent-page
-https://localhost/documents/download?file=/etc/passwd
-```
-
-The first two trigger database errors. In the starter, the catch-all Exception handler also converts the nonexistent route into a verbose 500; after your remediation that route must return a generic 404. The last URL behaves differently: it does **not** error — it returns HTTP 200 with the contents of `/etc/passwd`. That is a path-traversal / arbitrary-file-read disclosure, not an error condition. Record its response body and note how it differs from the error pages.
-
-For the first response, document:
-- The HTTP status code
-- Every internal detail exposed (stack traces, file paths, library versions, database errors, SQL queries)
-- Ensure that you still take a note of the other 3 pages, you will review them again later.
----
-
-### 2. Analyze What an Attacker Learns
-
-For the first error response, write a structured analysis: what was revealed, and how would an attacker use that specific piece of information in a subsequent attack? Be specific — "file paths were revealed" is not sufficient; "the path `/app/routes/grades.py` was revealed, telling the attacker the Flask routes are organized in an `app/routes/` directory which matches standard Flask project structure" is.
-
----
-
-### 3. Implement a Global Error Handler
-
-**What a global error handler does and what "least information" means:**
-Flask's `@app.errorhandler` decorator registers a function to be called whenever an exception of a given type propagates to the application level unhandled. By registering a handler for the base `Exception` class, you catch everything. The key principle here is *least information*: return only what the client needs to know (that an error occurred), and log everything else server-side where only authorized personnel can read it. `exc_info=True` in the log call tells the Python logging system to capture and include the full stack trace in the log entry — so you do not lose diagnostic information, you just stop broadcasting it to anonymous users.
-
-In `flask/app/__init__.py`, replace the current error handler with one that returns a generic response:
-
-```python
-from werkzeug.exceptions import HTTPException
-
-@app.errorhandler(Exception)
-def handle_error(e):
-    if isinstance(e, HTTPException):
-        return {"error": e.name}, e.code
-    app.logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
-    return {"error": "An unexpected error occurred."}, 500
-
-@app.errorhandler(404)
-def not_found(e):
-    return {"error": "Not found."}, 404
-```
-
-Rebuild and re-trigger the URLs from Step 1. Confirm the exception/404 responses do not expose internal details. The file-download disclosure still returns 200: generic error handling does not authorize files. Document it and carry that finding to Week 6 rather than claiming this handler fixes it.
-
----
-
-### 4. Configure Structured Logging
-
-**Why structured (JSON) logs are superior to plain text logs:**
-A plain text log entry like `ERROR 2025-01-15 login failed for jsmith` is readable by a human but difficult to query programmatically. When you have millions of log entries and need to find all failed logins by a specific user within a time window, plain text requires fragile string parsing. JSON-formatted logs can be indexed and queried by any log aggregation system (Splunk, Elasticsearch, CloudWatch) without custom parsing. The `LogRecord` object that Python passes to the `format()` method contains all available information about the log event — the `hasattr` checks allow you to include optional context fields (like `user` and `endpoint`) only when the code that generated the log event explicitly attached them.
-
-Create `flask/app/logging_config.py`:
-
-```python
-import logging
-import json
-from datetime import datetime
-
-class JSONFormatter(logging.Formatter):
-    def format(self, record):
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "level": record.levelname,
-            "message": record.getMessage(),
-            "module": record.module,
-        }
-        if hasattr(record, "user"):
-            log_entry["user"] = record.user
-        if hasattr(record, "endpoint"):
-            log_entry["endpoint"] = record.endpoint
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry)
-```
-
-Configure Flask to use this formatter and write logs to `/var/log/huskyhub/app.log` inside the container. Create `logs/` in the course root (`mkdir -p logs` in Terminal/Git Bash; `New-Item -ItemType Directory -Force logs` in PowerShell). Add `./logs:/var/log/huskyhub` to the existing Flask service volumes; retain uploads. Set the application logger and file handler to INFO so INFO records are not filtered, replace duplicate default handlers as needed, and create the log directory before opening the file. Configure logging before routes are used. Do not log passwords or entire cookies.
-
-Use `extra={"user": username, "endpoint": request.path}` on authentication/authorization events. Exception records can lack a user; the formatter deliberately treats these context fields as optional. Preserve HTTP exception codes, including the 403 responses you will introduce in Week 6.
-
----
-
-### 5. Add Security-Relevant Log Events
-
-**What makes a log event "security-relevant" and why log levels matter:**
-Security-relevant events are those that indicate something worth investigating: a successful authentication (establishes a timeline of who logged in and when), a failed authentication (establishes whether a brute force attempt is in progress), and an authorization denial (establishes whether a user is attempting to access resources beyond their permissions). Log levels — DEBUG, INFO, WARNING, ERROR — are not just labels; monitoring systems are typically configured to alert on WARNING and above. Using WARNING for failed logins means a spike in warnings can trigger an automatic alert before a human notices.
-
-Add log statements to the following locations in the codebase:
-
-| Event | Level | Location |
-|-------|-------|----------|
-| Successful login | INFO | `auth.py` login route |
-| Failed login attempt | WARNING | `auth.py` login route — include the username attempted |
-| Access to a resource without authorization | WARNING | Any route that checks the role cookie |
-| Unhandled exception | ERROR | Global error handler (already done in Step 3) |
-
-`current_app` is the Flask object that exposes the logger inside a route. Make sure it is included in the import at the top of `auth.py`:
-
-```python
-from flask import Blueprint, current_app, request, redirect, url_for, render_template, make_response
-```
-
-If `current_app` is missing from the import, login will throw a `NameError` and return a 500 error on every POST.
-
----
-
-### 6. Verify Log Output
-
-Trigger each of the four log events. Then read the log file:
+Connect to the running MySQL container:
 
 ```bash
-docker exec -it huskyhub-flask cat /var/log/huskyhub/app.log
+docker exec -it huskyhub-db mysql -u user -psupersecretpw huskyhub
 ```
 
-Paste at least one log entry per event type in your report. Confirm every record has timestamp, level, message, and module; user/endpoint appear when the log call supplies them. Show an exception record with its server-side traceback while its client response stays generic.
+Run:
+```sql
+SELECT username, password FROM users;
+```
+
+Screenshot the output. This is the before state.
 
 ---
 
-### 7. Audit Dependencies
+### 2. Add bcrypt to the Application
 
-**What a CVE is and what pip-audit checks:**
-A CVE (Common Vulnerabilities and Exposures) is a standardized identifier for a publicly disclosed security vulnerability in a software component. The National Vulnerability Database (NVD) maintains a searchable registry of CVEs with severity scores (CVSS) and descriptions. `pip-audit` compares the versions of packages listed in your requirements file against the NVD and the Python Packaging Advisory Database (PyPA). It does not analyze your code — it only checks whether the versions you have installed are known to be vulnerable. A clean audit result does not mean your code is secure; it means your dependencies have no *known published* vulnerabilities at this version.
+**Why a dedicated password hashing library and not a general-purpose hash:**
+General-purpose hash functions like SHA-256 or MD5 are designed to be fast — they can compute billions of hashes per second on commodity hardware. This is exactly wrong for passwords: a fast hash makes it trivial to try every word in a dictionary or every possible 8-character combination (a brute force attack) in hours. bcrypt is designed to be deliberately slow and to allow its cost factor to be increased as hardware gets faster. It also automatically generates a unique random salt for each password, which means two users with the same password will have completely different hash outputs — a precomputed table of hashes (a rainbow table) is therefore useless against a properly bcrypt-hashed database.
 
-Run pip-audit against the application's requirements file:
+In `flask/requirements.txt`, add:
+```
+bcrypt==4.1.2
+```
+
+Rebuild to confirm it installs:
+```bash
+docker compose up --build
+```
+
+---
+
+### 3. Write a Password Hashing Utility
+
+**What each function call in this utility does:**
+`plaintext.encode()` converts the Python string to bytes, because bcrypt operates on raw bytes rather than text strings. `bcrypt.gensalt()` generates a cryptographically random salt value — by default this encodes a cost factor of 12, meaning the hash computation iterates 2^12 = 4096 times. `bcrypt.hashpw(plaintext, salt)` runs the bcrypt algorithm and returns a single string that contains the salt, the cost factor, and the resulting hash all concatenated together. This is why bcrypt does not need a separate salt column in the database — the salt is embedded in the hash itself. `checkpw` performs the same computation on the plaintext and compares — it never stores or returns the plaintext.
+
+Create a new file `flask/app/utils.py`:
+
+```python
+import bcrypt
+
+def hash_password(plaintext: str) -> str:
+    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
+
+def check_password(plaintext: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plaintext.encode(), hashed.encode())
+```
+
+---
+
+### 4. Write a Migration Script
+
+**What a migration script is and why you cannot simply re-hash in place:**
+A migration script is a one-time program that transforms existing data from one format to another. You cannot simply overwrite passwords with their hashes in a single SQL UPDATE because you need to read each plaintext value, compute its hash, and write the result back — a row-by-row operation. After this script runs, the plaintext values no longer exist in the database. The script should be idempotent where possible (safe to run more than once), and after running it you should immediately verify the output before proceeding — a migration error that silently corrupts passwords would lock every user out of their account.
+
+Create `flask/migrate_passwords.py`. This script should:
+1. Connect to the database
+2. Read every user record
+3. Skip any password already beginning with `$2b$` or `$2a$` (so the script is safe to run more than once)
+4. Hash each plaintext password using your utility function
+5. Update the record with the hash
+
+The Dockerfile only copies `flask/app/` into the image, so a one-time script placed at `flask/migrate_passwords.py` is **not** inside the container. Rebuild first so your new `utils.py` is in the image, then copy the migration script into the running container and execute it:
+
+```bash
+docker compose up --build -d
+docker cp flask/migrate_passwords.py huskyhub-flask:/app/migrate_passwords.py
+docker exec -it huskyhub-flask python migrate_passwords.py
+```
+
+Verify in MySQL that no plaintext passwords remain.
+
+---
+
+### 5. Update the Login Endpoint
+
+**Why the SQL query must change — not just the comparison:**
+Before this change, the login query looked something like `WHERE username = ? AND password = ?`. This passed the plaintext password directly to the database for comparison. After hashing, the database contains bcrypt strings like `$2b$12$...`, not plaintext. You cannot compare a plaintext password to a bcrypt hash in SQL — the comparison must happen in Python using `bcrypt.checkpw`. This means the new query retrieves the user *by username only*, then passes the retrieved hash and the submitted password to `check_password()`. Never pass a password hash back into a SQL query to compare it — always verify in application code.
+
+In `flask/app/routes/auth.py`, modify the login query to retrieve the user by username only (no longer include the password in the SQL query), then use `check_password()` to verify the submitted password against the stored hash. Retain the `approved = 1` restriction, handle an unknown username without crashing, and set authenticated identity from the retrieved user record rather than unvalidated submitted text. Keep SQL parameterization as the Week 8 exercise.
+
+Test that existing accounts can still log in after the migration.
+
+---
+
+### 6. Update the Registration Endpoint
+
+In `flask/app/routes/auth.py`, modify the registration route to call `hash_password()` before inserting the new user's password into the database.
+
+Create a new test account and verify the stored value is a bcrypt hash — it should begin with `$2b$12$`. Its initial `approved` value must remain 0: an admin must approve it before login succeeds. Also verify that `pending1` still cannot log in.
+
+---
+
+### 7. Generate a Self-Signed TLS Certificate
+
+**What each flag in the OpenSSL command does:**
+`req -x509` generates a self-signed certificate (skipping the Certificate Signing Request step normally used when a CA is involved). `-newkey rsa:4096` creates a new RSA private key with a 4096-bit key length at the same time. `-keyout` and `-out` specify where to save the private key and certificate respectively. `-days 365` sets the certificate to expire in one year. `-nodes` (from "no DES") means the private key is saved without password encryption — necessary because nginx needs to read it automatically at startup without prompting. `-subj` provides the certificate's subject fields inline so OpenSSL does not prompt interactively; `CN=localhost` sets the display name. Modern browsers validate the **Subject Alternative Name (SAN)**; the command below includes `DNS:localhost` for the URL used in this lab.
 
 **macOS / Linux:**
 ```bash
-pip-audit -r flask/requirements.txt
+openssl req -x509 -newkey rsa:4096 \
+  -keyout nginx/key.pem \
+  -out nginx/cert.pem \
+  -days 365 -nodes \
+  -subj "/C=US/ST=Washington/O=UW/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
 
-**Windows:**
-```powershell
-pip-audit -r flask/requirements.txt
+**Windows (Git Bash):** use the same command with Git Bash path conversion disabled for the certificate subject:
+
+```bash
+MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:4096 \
+  -keyout nginx/key.pem \
+  -out nginx/cert.pem \
+  -days 365 -nodes \
+  -subj "/C=US/ST=Washington/O=UW/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
 
-Record every finding: CVE identifier, affected package, installed version, fixed version, and a one-line description.
+Verify `openssl version` first. If the installed OpenSSL/LibreSSL lacks `-addext`, use the provided [localhost certificate config](../../nginx/openssl-localhost.cnf.example) instead; this also avoids Git Bash's subject-string conversion:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
+  -keyout nginx/key.pem -out nginx/cert.pem \
+  -config nginx/openssl-localhost.cnf.example
+```
+
+Both methods include a localhost SAN. Keep nginx/key.pem private and out of submissions. Inspect the resulting certificate with `openssl x509 -in nginx/cert.pem -noout -text`; confirm the names and dates before mounting it.
+
+This generates a private key and a self-signed certificate in the `nginx/` directory.
 
 ---
 
-### 8. Research the Highest-Severity CVE
+### 8. Configure nginx for HTTPS
 
-**What a CVSS score measures:**
-The Common Vulnerability Scoring System (CVSS) assigns each vulnerability a score from 0 to 10 based on a standardized vector that captures the attack vector (network vs. local), the complexity of the attack, whether authentication is required, and the impact on confidentiality, integrity, and availability. A score above 9.0 is Critical — it typically means the vulnerability can be exploited remotely, without authentication, and results in full system compromise. Understanding the CVSS vector string (e.g., `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`) lets you reason about exploitability without reading the full advisory.
+**What the nginx configuration changes accomplish at the network level:**
+The first server block listens on port 80 (HTTP) and immediately issues an HTTP 301 redirect to the HTTPS version of the same URL. This means any client that connects over plain HTTP is immediately instructed to reconnect over HTTPS — subsequent requests use HTTPS; a client that initially POSTs a password to HTTP has already sent that body before receiving a redirect, so use the HTTPS login URL directly. The second block listens on port 443 (HTTPS), loads the certificate and private key, and proxies requests to the Flask container. `ssl_certificate` contains the public certificate sent to clients; `ssl_certificate_key` contains the private key used to authenticate the server during the TLS handshake. The private key never leaves the server. `proxy_set_header X-Real-IP` passes the client's original IP address to Flask, which nginx would otherwise mask behind its own internal IP.
 
-Select the highest-severity CVE from your audit. Look it up at [nvd.nist.gov](https://nvd.nist.gov). Document:
-- CVSS score and vector string
-- Attack vector (network / adjacent / local)
-- Whether authentication is required to exploit it
-- Whether a patched version exists
-- The specific impact it would have on the HuskyHub application
+Update `nginx/default.conf` to add an SSL server block on port 443 and redirect port 80 traffic to it:
+
+```nginx
+server {
+    listen 80;
+    server_name localhost;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name localhost;
+
+    ssl_certificate     /etc/nginx/certs/cert.pem;
+    ssl_certificate_key /etc/nginx/certs/key.pem;
+
+    # Keep serving static files directly, as in the original config
+    location /static/ {
+        alias /var/www/html/static/;
+    }
+
+    location / {
+        proxy_pass http://huskyhub-flask:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+> Keep the `location /static/` block inside the new `443` server block (it was present in the original `nginx/default.conf`) so nginx continues serving CSS and other static assets directly.
+
+Update the existing `huskyhub-nginx` service in `docker-compose.yaml` to mount the certs and expose port 443. **Add** the following entries to its existing ports/volumes; retain the static-file mount and other settings:
+```yaml
+huskyhub-nginx:
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes:
+    - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    - ./nginx/cert.pem:/etc/nginx/certs/cert.pem
+    - ./nginx/key.pem:/etc/nginx/certs/key.pem
+    - ./flask/app/static:/var/www/html/static
+```
+
+Rebuild and navigate to `https://localhost`. Accept the browser certificate warning (this is expected for self-signed certificates — your browser has not been configured to trust a Certificate Authority that signed this certificate).
+
+---
+
+### 9. Re-run the Week 2 Wireshark Capture
+
+**What TLS does to the packet contents Wireshark sees:**
+TLS (Transport Layer Security) encrypts the entire HTTP payload between the client and the server using a symmetric key negotiated during the TLS handshake. Wireshark can still capture the packets, but it sees only the encrypted ciphertext — it cannot recover the HTTP headers, the POST body, or the session cookies from those packets without the negotiated traffic secrets (a modern forward-secret TLS capture is not decrypted merely by obtaining the server private key). This is what "encryption in transit" means: the data is present on the wire, but it is computationally infeasible to read without the key.
+
+With Wireshark capturing, log in over `https://localhost`. Capture on the same loopback interface, using `tcp.port == 443` (or `tls`) as the display filter. Locate the handshake and encrypted application-data records. The Week 2 filter `http.request.method == "POST"` should no longer expose the login on this connection; an empty HTTP filter alone is not proof that a capture worked. Show both that TLS traffic was captured and that username/password/cookie headers are not readable in its payload. Do not enable TLS key logging for this exercise.
+
+> **macOS note:** To capture `localhost` HTTPS traffic in Wireshark, select the **Loopback (lo0)** interface.
+
+> **Windows note:** Select the **Npcap Loopback Adapter** interface.
+
+---
+
+### 10. Verify the Database Remediation
+
+Run the same MySQL query from Step 1:
+```sql
+SELECT username, password FROM users;
+```
+
+Screenshot the output. All values should now be bcrypt hashes beginning with `$2b$12$`.
 
 ---
 
 ## Write-Up Questions
 
-**Q1.** What is the principle of least information in the context of error handling? How does your global error handler implement this principle, and why is this different from "security through obscurity"?
+**Q1.** Explain the difference between encryption and hashing. Why is hashing the correct approach for password storage rather than symmetric encryption?
 
-**Q2.** Paste one JSON log entry for each of your four log event types. Explain why each field in the structured format is useful for incident response.
+**Q2.** What is a salt in the context of bcrypt? Paste one hash from your database and identify which part of the string is the salt. Why does bcrypt embed the salt in the hash output rather than storing it separately?
 
-**Q3.** The lecture covered third-party risk. What is a software supply chain attack? How does the SolarWinds breach illustrate that dependency risk extends beyond known CVEs in publicly listed packages?
+**Q3.** Paste the Wireshark capture output from re-running the Week 2 login over HTTPS. What does the payload look like now? What protocol layer handled the encryption?
+
+**Q4.** Your certificate is self-signed. What is the difference between a self-signed certificate and one signed by a Certificate Authority? What specific attack does a CA signature protect against that your certificate does not?
+
+**Q5.** In Week 2, ARP spoofing allowed an attacker to steal a session cookie, not just credentials. Does HTTPS fully protect against session cookie theft via MITM? If not, what additional remediation is required?
 
 ---
 
 ## Hacker Mindset Prompt
 
-Verbose error messages do reconnaissance for the attacker at zero cost. Every stack trace is a map of the application internals. Every database error message is a hint about the schema.
+Cryptography is frequently implemented incorrectly not because developers are ignorant of it, but because they make wrong assumptions about what it guarantees. MD5 and SHA-1 are cryptographic hash functions and yet they are completely inappropriate for password storage.
 
 Reflect on:
 
-- **Contrarian:** A developer adds verbose errors to help with debugging. How does the attacker benefit more from this decision than the developer does?
-- **Committed:** An attacker who discovers a vulnerable dependency in a target application does not stop at reading the CVE. Describe the exact steps they would take from discovery to exploit in the HuskyHub context.
-- **Creative:** Logging is a double-edged sword — it can also be used *against* an application. How could an attacker abuse a logging system itself as an attack vector? Research "Log4Shell" and explain how it fits this idea.
+- **Contrarian:** Why is a fast hash function (like SHA-256) *worse* for passwords than a slow one (like bcrypt)? What attacker behavior does this speed difference enable?
+- **Committed:** If an attacker obtained a database full of bcrypt hashes, describe the exact process they would use to attempt to crack them. What resources would they need?
+- **Creative:** bcrypt was designed in 1999. What properties would you want in a password hashing algorithm designed today, and does bcrypt still meet them?
+
+
+## Optional Extension — Local Certificate Trust
+
+This PKI extension is optional and does not replace required HTTPS verification. Your SAN-enabled certificate encrypts traffic but is not trusted by other machines automatically.
+
+On macOS, import `nginx/cert.pem` in Keychain Access and explicitly trust this lab certificate. On Windows, use `certmgr.msc` to import it into your current user's Trusted Root Certification Authorities. On Debian/Ubuntu, place a `.crt` copy in `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`. Browser certificate stores differ; check the browser's own certificate settings if the warning remains. Restart the browser and inspect issuer, subject, validity, and SAN.
+
+Explain why a classmate's untouched machine still sees a warning. Record where you imported it and remove that trust entry when the exercise is finished. This does not automatically establish trust in Python requests. Signed-session work remains in required Week 6.
 
 
 ## Submission checklist

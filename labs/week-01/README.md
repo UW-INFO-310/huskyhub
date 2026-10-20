@@ -113,7 +113,7 @@ password: password123
 **Why manual exploration comes before any tool:**
 Every automated scanning tool operates by sending requests to URLs it already knows about. If a page is not linked from anywhere the scanner starts, the scanner will not find it. A human walking through the application discovers pages, forms, and behaviors that no tool will enumerate automatically. You are building a mental model of the application's intended behavior — what a legitimate user does, what data flows where, what actions are possible. This model is the baseline against which you later identify deviations: actions that succeed when they should fail, data that appears when it should not, functionality that is accessible without the right credentials. The value of this step compounds across every subsequent lab.
 
-Before using any tools, manually visit the pages listed below after logging in. Take note of what each page does and what data it displays or accepts. Leave the AI Advisor for Week 9, when you will install and use the chatbot.
+Before using any tools, manually visit the pages listed below after logging in. Take note of what each page does and what data it displays or accepts. Leave the AI Advisor for Week 3, when you will install and use the chatbot.
 
 Navigate to each page listed below. For each one, copy the full URL from the address bar (including anything after the `?`), note every input field present, and record what data the page displays.
 
@@ -171,7 +171,7 @@ Record what you find. Consider: the server reads these values back on every requ
 
 #### Part C — Identify the Trust Assumption
 
-Record which cookie values describe identity or privilege. Describe what would happen if a server accepted a client-controlled role without checking it. **Do not change cookie values yet**; you will perform and remediate that attack in required Week 5.
+Record which cookie values describe identity or privilege. Describe what would happen if a server accepted a client-controlled role without checking it. **Do not change cookie values yet**; you will perform and remediate that attack in required Week 6.
 
 ---
 

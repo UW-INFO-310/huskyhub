@@ -73,19 +73,36 @@
     "nginx/openssl-localhost.cnf.example": "4dd41da42b5ae90fe62ee96dc342c616eb00b8694f633e642042c75df428bd89"
   },
   "publication_preparation": "Only distribution metadata and instructions updated; code unchanged since 18 passing checks.",
-  "latest_edit": "Week 2 restored to Summer six-step layout with a two-device workflow, original questions and policy warning, targeted-ARP correction, direct pip/Python setup, and no submission checklist; related notes and helper usage text synchronized.",
-  "latest_edit_date": "2026-10-13",
+  "latest_edit": "Moved AI to Week 3 and shifted cryptography through XSS to Weeks 4\u20139. Restored Summer AI structure, retained brief output-text fix, replaced Q2, and supplied eight complete deterministic pytest checks.",
+  "latest_edit_date": "2026-10-20",
   "latest_edit_validation": {
     "result": "passed",
+    "starter_ai_tests": {
+      "expected_failures": 5,
+      "passes": 3
+    },
+    "temporary_readme_remediation_ai_tests": {
+      "passes": 8
+    },
+    "missing_defense_checks": {
+      "context": "1 failure",
+      "document_wrapper": "2 failures",
+      "source_disclosure": "1 failure",
+      "output_encoding": "1 failure"
+    },
+    "existing_checks_passed": 18,
     "checks": [
-      "Summer question/reflection and platform setup sections match verbatim",
-      "Policy warning differs only in the selected-target ARP sentence",
-      "Six main steps; Wireshark tutorial before steps; no virtual-environment commands or submission checklist",
-      "Distributed Markdown local links and balanced code fences",
-      "Two helper missing-argument help paths with packet functions stubbed; no network operations",
-      "Helper packet logic and all application code unchanged"
+      "Nine-week sequence, moved assets, active links and prerequisites",
+      "Week 3 nine steps, three questions, Summer structure, no XSS exploit or test-writing assignment",
+      "All Markdown local links and fences; Python files and examples parse",
+      "Normal and AI-profile Compose configuration",
+      "Starter app Python/templates and pinned requirements unchanged"
     ],
-    "runtime_tests_rerun": false,
+    "runtime_tests_rerun": true,
+    "runtime": "Python 3.12; pinned application packages; controlled MySQL and Ollama responses",
+    "docker_image_build_run": false,
+    "live_model_run": false,
     "live_network_checks_run": false
-  }
+  },
+  "file_fingerprints_scope": "Original October 6 build snapshot; later local revisions are described in latest_edit_validation and docs/VALIDATION.md."
 }
