@@ -1,9 +1,5 @@
 # Week 4 Lab — Cryptography: Hashing Passwords and Enforcing HTTPS
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Week 2 packet-capture observations; continue your existing application and keep the Week 3 AI fixes
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 **Lecture:** Introduction to Cryptography; Public Key Cryptography and PKI
 
 ---
@@ -41,6 +37,8 @@ In Week 2 you captured credentials in cleartext and stole a session cookie over 
 
 ## Steps
 
+Run terminal commands from your existing `huskyhub` folder. Continue with your Week 2 observations and keep the Week 3 AI fixes. When a step opens the MySQL prompt, type `exit;` to return to your terminal before running Docker or OpenSSL commands.
+
 ### 1. Observe Plaintext Passwords in the Database
 
 **What `docker exec` does and why we use it here:**
@@ -73,7 +71,7 @@ bcrypt==4.1.2
 
 Rebuild to confirm it installs:
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 ---
@@ -109,7 +107,9 @@ Create `flask/migrate_passwords.py`. This script should:
 4. Hash each plaintext password using your utility function
 5. Update the record with the hash
 
-The Dockerfile only copies `flask/app/` into the image, so a one-time script placed at `flask/migrate_passwords.py` is **not** inside the container. Rebuild first so your new `utils.py` is in the image, then copy the migration script into the running container and execute it:
+Use `get_connection()` from `app.database` and `hash_password()` from `app.utils`, identify each record by `user_id`, and commit the updates before closing the connection.
+
+The Dockerfile copies `flask/app/` and the provided tests into the image, but a one-time script placed at `flask/migrate_passwords.py` is **not** included. Rebuild first so your new `utils.py` is in the image, then copy the migration script into the running container and execute it:
 
 ```bash
 docker compose up --build -d
@@ -117,7 +117,7 @@ docker cp flask/migrate_passwords.py huskyhub-flask:/app/migrate_passwords.py
 docker exec -it huskyhub-flask python migrate_passwords.py
 ```
 
-Verify in MySQL that no plaintext passwords remain.
+Verify in MySQL that no plaintext passwords remain. Run the script a second time and confirm the stored hashes do not change. Login will not work with the migrated accounts until you complete Step 5. If a later rebuild recreates the Flask container, copy the script into it again before rerunning it.
 
 ---
 
@@ -128,7 +128,13 @@ Before this change, the login query looked something like `WHERE username = ? AN
 
 In `flask/app/routes/auth.py`, modify the login query to retrieve the user by username only (no longer include the password in the SQL query), then use `check_password()` to verify the submitted password against the stored hash. Retain the `approved = 1` restriction, handle an unknown username without crashing, and set authenticated identity from the retrieved user record rather than unvalidated submitted text. Keep SQL parameterization as the Week 8 exercise.
 
-Test that existing accounts can still log in after the migration.
+Rebuild after editing `auth.py`:
+
+```bash
+docker compose up --build -d
+```
+
+Test that existing accounts can still log in after the migration. Verify that a wrong password and an unknown username are rejected without a server error.
 
 ---
 
@@ -136,7 +142,7 @@ Test that existing accounts can still log in after the migration.
 
 In `flask/app/routes/auth.py`, modify the registration route to call `hash_password()` before inserting the new user's password into the database.
 
-Create a new test account and verify the stored value is a bcrypt hash — it should begin with `$2b$12$`. Its initial `approved` value must remain 0: an admin must approve it before login succeeds. Also verify that `pending1` still cannot log in.
+Rebuild using the command in Step 5. Create a new test account and verify the stored value is a bcrypt hash — it should begin with `$2b$12$`. Its initial `approved` value must remain 0: an admin must approve it before login succeeds. Verify login is rejected before approval and succeeds after approval. Also verify that `pending1` still cannot log in.
 
 ---
 
@@ -210,6 +216,7 @@ server {
         proxy_pass http://huskyhub-flask:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
@@ -229,7 +236,14 @@ huskyhub-nginx:
     - ./flask/app/static:/var/www/html/static
 ```
 
-Rebuild and navigate to `https://localhost`. Accept the browser certificate warning (this is expected for self-signed certificates — your browser has not been configured to trust a Certificate Authority that signed this certificate).
+Apply the configuration and check nginx:
+
+```bash
+docker compose up --build -d
+docker compose exec huskyhub-nginx nginx -t
+```
+
+Navigate directly to `https://localhost/login`. Accept the browser certificate warning (this is expected for self-signed certificates — your browser has not been configured to trust a Certificate Authority that signed this certificate). Confirm login and static styling still work. Separately open `http://localhost` and confirm it redirects to HTTPS.
 
 ---
 
@@ -238,7 +252,7 @@ Rebuild and navigate to `https://localhost`. Accept the browser certificate warn
 **What TLS does to the packet contents Wireshark sees:**
 TLS (Transport Layer Security) encrypts the entire HTTP payload between the client and the server using a symmetric key negotiated during the TLS handshake. Wireshark can still capture the packets, but it sees only the encrypted ciphertext — it cannot recover the HTTP headers, the POST body, or the session cookies from those packets without the negotiated traffic secrets (a modern forward-secret TLS capture is not decrypted merely by obtaining the server private key). This is what "encryption in transit" means: the data is present on the wire, but it is computationally infeasible to read without the key.
 
-With Wireshark capturing, log in over `https://localhost`. Capture on the same loopback interface, using `tcp.port == 443` (or `tls`) as the display filter. Locate the handshake and encrypted application-data records. The Week 2 filter `http.request.method == "POST"` should no longer expose the login on this connection; an empty HTTP filter alone is not proof that a capture worked. Show both that TLS traffic was captured and that username/password/cookie headers are not readable in its payload. Do not enable TLS key logging for this exercise.
+With Wireshark capturing, log in over `https://localhost`. Capture on the loopback interface for this localhost connection, using `tcp.port == 443` (or `tls`) as the display filter. Locate the handshake and encrypted application-data records. The Week 2 filter `http.request.method == "POST"` should no longer expose the login on this connection; an empty HTTP filter alone is not proof that a capture worked. Show both that TLS traffic was captured and that username/password/cookie headers are not readable in its payload. Do not enable TLS key logging for this exercise.
 
 > **macOS note:** To capture `localhost` HTTPS traffic in Wireshark, select the **Loopback (lo0)** interface.
 
@@ -263,11 +277,7 @@ Screenshot the output. All values should now be bcrypt hashes beginning with `$2
 
 **Q2.** What is a salt in the context of bcrypt? Paste one hash from your database and identify which part of the string is the salt. Why does bcrypt embed the salt in the hash output rather than storing it separately?
 
-**Q3.** Paste the Wireshark capture output from re-running the Week 2 login over HTTPS. What does the payload look like now? What protocol layer handled the encryption?
-
-**Q4.** Your certificate is self-signed. What is the difference between a self-signed certificate and one signed by a Certificate Authority? What specific attack does a CA signature protect against that your certificate does not?
-
-**Q5.** In Week 2, ARP spoofing allowed an attacker to steal a session cookie, not just credentials. Does HTTPS fully protect against session cookie theft via MITM? If not, what additional remediation is required?
+**Q3.** Your certificate is self-signed. What is the difference between a self-signed certificate and one signed by a Certificate Authority? What specific attack does a CA signature protect against that your certificate does not?
 
 ---
 
@@ -281,6 +291,7 @@ Reflect on:
 - **Committed:** If an attacker obtained a database full of bcrypt hashes, describe the exact process they would use to attempt to crack them. What resources would they need?
 - **Creative:** bcrypt was designed in 1999. What properties would you want in a password hashing algorithm designed today, and does bcrypt still meet them?
 
+---
 
 ## Optional Extension — Local Certificate Trust
 
@@ -289,8 +300,3 @@ This PKI extension is optional and does not replace required HTTPS verification.
 On macOS, import `nginx/cert.pem` in Keychain Access and explicitly trust this lab certificate. On Windows, use `certmgr.msc` to import it into your current user's Trusted Root Certification Authorities. On Debian/Ubuntu, place a `.crt` copy in `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`. Browser certificate stores differ; check the browser's own certificate settings if the warning remains. Restart the browser and inspect issuer, subject, validity, and SAN.
 
 Explain why a classmate's untouched machine still sees a warning. Record where you imported it and remove that trust entry when the exercise is finished. This does not automatically establish trust in Python requests. Signed-session work remains in required Week 6.
-
-
-## Submission checklist
-
-Submit the four-section report described in [LAB_GUIDE.md](../../LAB_GUIDE.md), with the required step evidence, your answers/reflections, and source files or a readable diff for changes you made. Include normal-use checks after each remediation. Due date, points, and LMS destination are **TBD by the instructor**. Mark optional work separately.

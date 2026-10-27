@@ -121,7 +121,5 @@ The database is recreated from your `database/init.sql`. After Week 4, rerun you
 - `nginx/default.conf`: HTTP starter; students add TLS and CSP later.
 - `database/init.sql`: fictional seed records and starter schema.
 - `labs/week-01` through `labs/week-09`: canonical instructions and provided assets.
-- [Merge notes](docs/MERGE_NOTES.md): instructor-facing source history and Autumn decisions.
-- [Validation record](docs/VALIDATION.md): checks and outstanding runtime/instructor review.
 
-Based on [Andy Herman's Spring HuskyHub](https://github.com/andy-herman/huskyhub) and [Coltigo's Summer 2026 HuskyHub](https://github.com/Coltigo/huskyhub-su26). See the [source attribution](docs/MERGE_NOTES.md) and preserved [GPL-3.0 license](LICENSE).
+Based on [Andy Herman's Spring HuskyHub](https://github.com/andy-herman/huskyhub) and [Coltigo's Summer 2026 HuskyHub](https://github.com/Coltigo/huskyhub-su26). See the preserved [GPL-3.0 license](LICENSE).

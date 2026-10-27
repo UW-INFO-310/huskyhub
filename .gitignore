@@ -11,3 +11,4 @@ flask/app/uploads/*
 logs/
 nginx/key.pem
 nginx/cert.pem
+/docs/
