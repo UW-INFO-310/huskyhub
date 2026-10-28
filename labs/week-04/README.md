@@ -124,9 +124,55 @@ Verify in MySQL that no plaintext passwords remain. Run the script a second time
 ### 5. Update the Login Endpoint
 
 **Why the SQL query must change — not just the comparison:**
-Before this change, the login query looked something like `WHERE username = ? AND password = ?`. This passed the plaintext password directly to the database for comparison. After hashing, the database contains bcrypt strings like `$2b$12$...`, not plaintext. You cannot compare a plaintext password to a bcrypt hash in SQL — the comparison must happen in Python using `bcrypt.checkpw`. This means the new query retrieves the user *by username only*, then passes the retrieved hash and the submitted password to `check_password()`. Never pass a password hash back into a SQL query to compare it — always verify in application code.
+The starter's login query includes both the submitted username and plaintext password. After hashing, the database contains bcrypt strings like `$2b$12$...`, not plaintext. You cannot compare a plaintext password to a bcrypt hash in SQL — the comparison must happen in Python using `check_password()`. Retrieve the approved user by username, then verify the submitted password against that user's stored hash.
 
-In `flask/app/routes/auth.py`, modify the login query to retrieve the user by username only (no longer include the password in the SQL query), then use `check_password()` to verify the submitted password against the stored hash. Retain the `approved = 1` restriction, handle an unknown username without crashing, and set authenticated identity from the retrieved user record rather than unvalidated submitted text. Keep SQL parameterization as the Week 8 exercise.
+Make the following edits in `flask/app/routes/auth.py`. Each example shows the surrounding existing code; comments marked **ADD** or **CHANGED** identify the new lines. Keep SQL parameterization as the Week 8 exercise.
+
+**5.1. Add the password utility import.** At the top of the file, add this line immediately after the existing database import:
+
+```python
+from flask import (
+    Blueprint, request, redirect, url_for,
+    render_template, make_response
+)
+from ..database import get_connection
+from ..utils import hash_password, check_password  # ADD
+
+auth_bp = Blueprint("auth", __name__)
+```
+
+**5.2. Remove the password comparison from the login query.** Inside `login()`, replace the existing query block with the one below. The `AND password = ...` line is removed; keep `AND approved = 1` so unapproved accounts cannot log in. Leave the following execute, fetch, and close lines in place:
+
+```python
+        # Retrieve the approved account; check its password in Python below.
+        query = (
+            f"SELECT * FROM users "
+            f"WHERE username = '{username}' "
+            f"AND approved = 1"
+        )
+        cursor.execute(query)
+        user = cursor.fetchone()
+        conn.close()
+```
+
+**5.3. Verify the password and use the retrieved identity.** Immediately below `conn.close()`, replace the existing login success/failure block with this version. Change `if user:` to the password check shown below, and change the `authenticated` cookie value from `username` to `user["username"]`:
+
+```python
+        user = cursor.fetchone()
+        conn.close()
+
+        if user and check_password(password, user["password"]):  # CHANGED
+            resp = make_response(redirect(url_for("home")))
+            # Store identity in cookies so the app knows who is logged in
+            resp.set_cookie("authenticated", user["username"])  # CHANGED
+            resp.set_cookie("role", user["role"])
+            resp.set_cookie("user_id", str(user["user_id"]))
+            return resp
+        else:
+            error = "Invalid username or password."
+```
+
+The first two lines are existing context: keep only one copy of them. The `user and` check prevents an unknown username from reaching `check_password()`. Leave the final `return render_template("login.html", error=error)` and the logout route unchanged.
 
 Rebuild after editing `auth.py`:
 
@@ -134,15 +180,63 @@ Rebuild after editing `auth.py`:
 docker compose up --build -d
 ```
 
-Test that existing accounts can still log in after the migration. Verify that a wrong password and an unknown username are rejected without a server error.
+Test that an approved existing account can still log in after the migration. Verify that a wrong password, an unknown username, and the unapproved `pending1` account are rejected without a server error.
 
 ---
 
 ### 6. Update the Registration Endpoint
 
-In `flask/app/routes/auth.py`, modify the registration route to call `hash_password()` before inserting the new user's password into the database.
+Continue editing the same `flask/app/routes/auth.py` file. The `hash_password` import was added in Step 5.1.
 
-Rebuild using the command in Step 5. Create a new test account and verify the stored value is a bcrypt hash — it should begin with `$2b$12$`. Its initial `approved` value must remain 0: an admin must approve it before login succeeds. Verify login is rejected before approval and succeeds after approval. Also verify that `pending1` still cannot log in.
+**6.1. Hash the submitted password before building the INSERT.** Inside `register()`, add `hashed = hash_password(password)` immediately after the `email` line and before `conn = get_connection()`:
+
+```python
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        first_name = request.form.get("first_name", "")
+        last_name = request.form.get("last_name", "")
+        email = request.form.get("email", "")
+
+        hashed = hash_password(password)  # ADD
+
+        conn = get_connection()
+        cursor = conn.cursor()
+```
+
+**6.2. Insert the hash instead of the plaintext password.** In the query directly below those lines, replace `{password}` with `{hashed}` in the VALUES string:
+
+```python
+        cursor = conn.cursor()
+
+        query = (
+            f"INSERT INTO users "
+            f"(username, first_name, last_name, email, password, role, approved) "
+            f"VALUES ('{username}', '{first_name}', '{last_name}', "
+            f"'{email}', '{hashed}', 'student', 0)"  # CHANGED
+        )
+```
+
+The `cursor` line is existing context; keep only one copy. The assignment in Step 6.1 must appear before this query uses `hashed`. Keep the role as `'student'` and `approved` as `0`, and retain the existing `try`/`except`/`finally` block, including `conn.commit()`.
+
+Rebuild after saving both registration changes:
+
+```bash
+docker compose up --build -d
+```
+
+Verify registration and approval:
+
+1. Open `/register` in your browser and create an account with an unused username, such as `crypto_test`.
+2. Open the MySQL prompt using the command in Step 1. Run this query, replacing `crypto_test` if you chose a different username:
+
+   ```sql
+   SELECT username, password, approved FROM users WHERE username = 'crypto_test';
+   ```
+
+   Confirm the stored password begins with `$2b$12$` and `approved` is `0`. Type `exit;` to leave MySQL.
+3. Try logging in as the new account. Login must be rejected before approval.
+4. Log in as `admin`, open **Users** (`/admin/users`), and click **Approve** for your new account. Log out, then confirm the new account can log in with its original password.
+5. Confirm a wrong password is still rejected and `pending1` still cannot log in. Approve only your new test account; leave `pending1` unapproved.
 
 ---
 
@@ -293,10 +387,83 @@ Reflect on:
 
 ---
 
-## Optional Extension — Local Certificate Trust
+## Optional Extension — Local Certificate Trust (Extra Credit)
 
-This PKI extension is optional and does not replace required HTTPS verification. Your SAN-enabled certificate encrypts traffic but is not trusted by other machines automatically.
+Earn **0.5 extra-credit points added to your lab score** by completing this extension and answering **both extra-credit write-up questions** below. Complete the instructions for **one operating system** and verify trust in your browser. Include your verification evidence and answers in an extra-credit subsection of your lab's **Write-Up Questions** section. This extension does not replace the required HTTPS verification in Step 9.
 
-On macOS, import `nginx/cert.pem` in Keychain Access and explicitly trust this lab certificate. On Windows, use `certmgr.msc` to import it into your current user's Trusted Root Certification Authorities. On Debian/Ubuntu, place a `.crt` copy in `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates`. Browser certificate stores differ; check the browser's own certificate settings if the warning remains. Restart the browser and inspect issuer, subject, validity, and SAN.
+### 1. Install and Trust the Certificate — Choose Your OS
 
-Explain why a classmate's untouched machine still sees a warning. Record where you imported it and remove that trust entry when the exercise is finished. This does not automatically establish trust in Python requests. Signed-session work remains in required Week 6.
+Use the public certificate, `nginx/cert.pem`, that you generated in Step 7. Perform these steps on the computer running your browser, outside Docker. For a Windows browser, use the Windows certificate store even if you generated the certificate in WSL. Keep `nginx/key.pem` private.
+
+#### macOS — Keychain Access
+
+1. Press **Cmd+Space**, type **Keychain Access**, and press **Return**.
+2. In the left sidebar, select **login** to trust the certificate for your account, or **System** to make it available system-wide.
+3. In Finder, open your `huskyhub/nginx` folder and drag **cert.pem** into the selected keychain in Keychain Access. Enter administrator credentials if prompted.
+4. Select the **Certificates** category or tab, find the certificate named **localhost**, and double-click it. Check its details against the certificate you generated if you have several localhost entries, then expand **Trust**.
+5. Set **Secure Sockets Layer (SSL)** to **Always Trust**.
+6. Close the certificate window and authenticate if prompted to save the change. Fully quit and reopen your browser, then continue to **Verify Browser Trust** below.
+
+[Apple: add certificates](https://support.apple.com/en-ie/guide/keychain-access/kyca2431/mac) · [Apple: change certificate trust](https://support.apple.com/en-ie/guide/keychain-access/kyca11871/mac)
+
+#### Windows — Local Computer Certificate Store
+
+1. In Git Bash, from your `huskyhub` folder, create a Windows-friendly copy of the public certificate:
+
+   ```bash
+   openssl x509 -in nginx/cert.pem -outform der -out nginx/cert.cer
+   ```
+
+2. Press **Win+R**, type **certlm.msc**, and press **Enter**. Approve the administrator prompt if shown. This opens **Certificates — Local Computer**; importing here requires administrator permission.
+3. Expand **Trusted Root Certification Authorities**, then select **Certificates**.
+4. Right-click **Certificates** and choose **All Tasks → Import…**. Click **Next**, then **Browse…**.
+5. Navigate to your `huskyhub/nginx` folder, select **cert.cer**, and click **Open**, then **Next**.
+6. Confirm **Place all certificates in the following store** is selected and the store is **Trusted Root Certification Authorities**. Click **Next → Finish**. Confirm the installation if prompted, then click **OK** on the success message.
+7. Find **localhost** in the certificate list and open it to check its details. Continue to **Verify Browser Trust** below.
+
+[Microsoft: certificate-store scopes and imports](https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/inspect-certificates-manage-certificate-stores)
+
+#### Ubuntu / Debian — System Trust Store
+
+1. Open a terminal on your Linux host and change to your `huskyhub` folder.
+2. Copy the public certificate into the local trust directory with a `.crt` extension, then update the trust store:
+
+   ```bash
+   sudo cp nginx/cert.pem /usr/local/share/ca-certificates/huskyhub.crt
+   sudo update-ca-certificates
+   ```
+
+3. Check the command output for the added certificate. Continue below; some Linux browsers, especially sandboxed packages, also need a browser-specific import.
+
+[Ubuntu: install a certificate in the trust store](https://ubuntu.com/server/docs/how-to/security/install-a-root-ca-certificate-in-the-trust-store/)
+
+### 2. Verify Browser Trust
+
+1. Fully quit and reopen your browser, then visit **https://localhost**.
+2. Confirm the site opens without a certificate warning or clicking through an exception. Open the browser's site-information or connection-security control beside the address bar, then view the certificate. The icon and labels vary by browser; a padlock is not required.
+3. Check that the certificate is the one you installed, includes **localhost** in its Subject Alternative Names, and is within its validity dates. Capture the trusted certificate entry in your OS certificate manager and the browser's warning-free connection/certificate details for your report.
+
+**If Firefox still shows a warning:**
+
+The settings below address an untrusted issuer. They do not fix a missing localhost SAN or a certificate marked `CA:TRUE` being used as a server certificate; Firefox can still reject that certificate after import. A browser exception does not satisfy this extension's warning-free verification requirement.
+
+1. Open **☰ → Settings → Privacy & Security** and search Settings for **certificates**. Expand **Advanced settings** if the Certificates controls are there.
+2. On Windows or macOS, enable **Allow Firefox to automatically trust third-party root certificates you install** if it is disabled, restart Firefox, and retry.
+3. On Linux, or if a separate import is still needed, click **View Certificates… → Authorities → Import…**. Select your `nginx/cert.pem`, enable **Trust this CA to identify websites**, and click **OK**.
+4. Restart Firefox and repeat the verification above. See [Mozilla's certificate-authority guidance](https://support.mozilla.org/en-US/kb/setting-certificate-authorities-firefox).
+
+**If Chrome / Chromium on Linux still shows a warning:**
+
+1. Enter **chrome://settings/certificates** in the address bar and open **Manage Certificates** if shown.
+2. Open the local/custom trusted-certificate area (**Authorities** in the older manager), click **Import**, and select `nginx/cert.pem`. Enable trust for identifying websites if prompted.
+3. Restart the browser and repeat verification. See [Chromium's Linux certificate-management guide](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/linux/cert_management.md) if your installed browser uses different labels.
+
+After saving your evidence, remove the lab certificate from the OS and browser stores where you imported it when you are finished using it. On Ubuntu/Debian, remove only your `/usr/local/share/ca-certificates/huskyhub.crt` copy and run `sudo update-ca-certificates --fresh`.
+
+### Extra-Credit Write-Up Questions
+
+Answer both questions to receive the **0.5 extra-credit points** for this extension. Include both questions and your answers, labeled **EC1** and **EC2**, in an extra-credit subsection of your lab's **Write-Up Questions** section, along with your verification evidence.
+
+**EC1.** Before importing your self-signed certificate, the browser displayed a warning even though the connection used HTTPS. What security property was missing? Explain what changed after you explicitly trusted the certificate and whether the encryption itself changed.
+
+**EC2.** After trusting your certificate on your laptop, would a classmate’s untouched laptop automatically trust it? Explain where trust was established and how this differs from using a certificate issued by a publicly trusted Certificate Authority.
