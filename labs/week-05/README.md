@@ -1,9 +1,5 @@
 # Week 5 Lab — Logging, Error Handling, and Third-Party Risk
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Week 4 HTTPS; keep hashing and approval checks
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 **Lecture:** Application Layer, HTTP, Architecture, and Logging; Application Frontend, Backend, and 3rd Parties
 
 ---
@@ -43,6 +39,8 @@ pip install pip-audit
 ---
 
 ## Steps
+
+Run terminal commands from your existing `huskyhub` folder. Continue with Week 4 HTTPS, password hashing, and approval checks, and keep your Week 3 AI fixes.
 
 ### 1. Trigger Verbose Errors
 
@@ -172,21 +170,23 @@ Paste at least one log entry per event type in your report. Confirm every record
 ### 7. Audit Dependencies
 
 **What a CVE is and what pip-audit checks:**
-A CVE (Common Vulnerabilities and Exposures) is a standardized identifier for a publicly disclosed security vulnerability in a software component. The National Vulnerability Database (NVD) maintains a searchable registry of CVEs with severity scores (CVSS) and descriptions. `pip-audit` compares the versions of packages listed in your requirements file against the NVD and the Python Packaging Advisory Database (PyPA). It does not analyze your code — it only checks whether the versions you have installed are known to be vulnerable. A clean audit result does not mean your code is secure; it means your dependencies have no *known published* vulnerabilities at this version.
+A CVE (Common Vulnerabilities and Exposures) is a standardized identifier for a publicly disclosed security vulnerability in a software component. The National Vulnerability Database (NVD) provides CVE descriptions and severity information (CVSS) for your research in Step 8. By default, `pip-audit` checks package versions resolved from your requirements file against vulnerability data provided through PyPI, rather than querying NVD directly. It does not analyze your application code. A clean audit result means no known vulnerabilities were reported for the packages successfully audited; it does not establish that your application is secure.
 
 Run pip-audit against the application's requirements file:
 
 **macOS / Linux:**
 ```bash
-pip-audit -r flask/requirements.txt
+pip-audit -r flask/requirements.txt --aliases
 ```
 
 **Windows:**
 ```powershell
-pip-audit -r flask/requirements.txt
+pip-audit -r flask/requirements.txt --aliases
 ```
 
-Record every finding: CVE identifier, affected package, installed version, fixed version, and a one-line description.
+The `--aliases` flag displays alternative identifiers, including CVEs when available, alongside the primary advisory ID (such as `PYSEC-...` or `GHSA-...`). These identifiers can refer to the same vulnerability; do not count aliases as separate findings.
+
+Record every finding: advisory ID, CVE identifier if available, affected package, audited version, fixed version (or "none listed"), and a one-line description. If no CVE is listed, record "No CVE listed" and retain the finding. Use a finding with a CVE for Step 8. An exit code of `1` is expected when vulnerabilities are found.
 
 ---
 
@@ -223,8 +223,3 @@ Reflect on:
 - **Contrarian:** A developer adds verbose errors to help with debugging. How does the attacker benefit more from this decision than the developer does?
 - **Committed:** An attacker who discovers a vulnerable dependency in a target application does not stop at reading the CVE. Describe the exact steps they would take from discovery to exploit in the HuskyHub context.
 - **Creative:** Logging is a double-edged sword — it can also be used *against* an application. How could an attacker abuse a logging system itself as an attack vector? Research "Log4Shell" and explain how it fits this idea.
-
-
-## Submission checklist
-
-Submit the four-section report described in [LAB_GUIDE.md](../../LAB_GUIDE.md), with the required step evidence, your answers/reflections, and source files or a readable diff for changes you made. Include normal-use checks after each remediation. Due date, points, and LMS destination are **TBD by the instructor**. Mark optional work separately.
