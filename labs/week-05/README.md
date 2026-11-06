@@ -77,6 +77,8 @@ Flask's `@app.errorhandler` decorator registers a function to be called whenever
 
 In `flask/app/__init__.py`, replace the current error handler with one that returns a generic response:
 
+Place the `HTTPException` import at the top of the file. Keep both handler functions and their decorators indented inside `create_app()`, before `return app`.
+
 ```python
 from werkzeug.exceptions import HTTPException
 
@@ -153,11 +155,19 @@ from flask import Blueprint, current_app, request, redirect, url_for, render_tem
 
 If `current_app` is missing from the import, login will throw a `NameError` and return a 500 error on every POST.
 
+Also add `current_app` to the existing Flask import in `admin.py` if you add authorization-denial logging there.
+
+Rebuild after the Python and Compose changes before verifying the log events in Step 6:
+
+```bash
+docker compose up --build -d
+```
+
 ---
 
 ### 6. Verify Log Output
 
-Trigger each of the four log events. Then read the log file:
+Trigger each of the four log events. To test an authorization denial, log in as `jsmith` and visit `https://localhost/admin/users`; the existing redirect should remain, and a WARNING should appear in the log. Then read the log file:
 
 ```bash
 docker exec -it huskyhub-flask cat /var/log/huskyhub/app.log
@@ -193,14 +203,14 @@ Record every finding: advisory ID, CVE identifier if available, affected package
 ### 8. Research the Highest-Severity CVE
 
 **What a CVSS score measures:**
-The Common Vulnerability Scoring System (CVSS) assigns each vulnerability a score from 0 to 10 based on a standardized vector that captures the attack vector (network vs. local), the complexity of the attack, whether authentication is required, and the impact on confidentiality, integrity, and availability. A score above 9.0 is Critical — it typically means the vulnerability can be exploited remotely, without authentication, and results in full system compromise. Understanding the CVSS vector string (e.g., `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`) lets you reason about exploitability without reading the full advisory.
+The Common Vulnerability Scoring System (CVSS) describes a vulnerability's technical severity using a score from 0 to 10 and a vector describing its characteristics. For CVSS v3.1, scores of **9.0–10.0 are Critical**. A Critical rating does not automatically mean the vulnerability allows unauthenticated remote access or complete system compromise. Read the actual vector to identify the attack vector, attack complexity, privileges required, user interaction, and effects on confidentiality, integrity, and availability. Then consider whether HuskyHub meets the conditions required for exploitation.
 
 Select the highest-severity CVE from your audit. Look it up at [nvd.nist.gov](https://nvd.nist.gov). Document:
-- CVSS score and vector string
+- CVSS score, version, vector string, and source of the score
 - Attack vector (network / adjacent / local)
 - Whether authentication is required to exploit it
 - Whether a patched version exists
-- The specific impact it would have on the HuskyHub application
+- The potential impact on HuskyHub, including whether its configuration and use of the affected package meet the advisory's exploitation conditions. State any uncertainty.
 
 ---
 
