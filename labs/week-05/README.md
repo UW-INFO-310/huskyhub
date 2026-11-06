@@ -75,24 +75,32 @@ For the first error response, write a structured analysis: what was revealed, an
 **What a global error handler does and what "least information" means:**
 Flask's `@app.errorhandler` decorator registers a function to be called whenever an exception of a given type propagates to the application level unhandled. By registering a handler for the base `Exception` class, you catch everything. The key principle here is *least information*: return only what the client needs to know (that an error occurred), and log everything else server-side where only authorized personnel can read it. `exc_info=True` in the log call tells the Python logging system to capture and include the full stack trace in the log entry — so you do not lose diagnostic information, you just stop broadcasting it to anonymous users.
 
-In `flask/app/__init__.py`, replace the current error handler with one that returns a generic response:
+Make the following edits in `flask/app/__init__.py`. The examples separate the top-level import from the handlers inside the application factory.
 
-Place the `HTTPException` import at the top of the file. Keep both handler functions and their decorators indented inside `create_app()`, before `return app`.
+**3.1. Add the exception import.** At the top of the file, below the existing Flask import, add:
 
 ```python
-from werkzeug.exceptions import HTTPException
-
-@app.errorhandler(Exception)
-def handle_error(e):
-    if isinstance(e, HTTPException):
-        return {"error": e.name}, e.code
-    app.logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
-    return {"error": "An unexpected error occurred."}, 500
-
-@app.errorhandler(404)
-def not_found(e):
-    return {"error": "Not found."}, 404
+from werkzeug.exceptions import HTTPException  # ADD
 ```
+
+**3.2. Replace the traceback-returning handler.** Near the end of `create_app()`, replace the existing `@app.errorhandler(Exception)` decorator and its `handle_error()` function with the two handlers below. Keep both decorators and functions indented four spaces inside `create_app()`:
+
+```python
+    @app.errorhandler(Exception)
+    def handle_error(e):
+        if isinstance(e, HTTPException):
+            return {"error": e.name}, e.code
+        app.logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+        return {"error": "An unexpected error occurred."}, 500
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return {"error": "Not found."}, 404
+
+    return app
+```
+
+The final `return app` is existing context: keep only one copy. Retain the rest of the factory, including its configuration, blueprint registrations, and home route. This replaces the old handler; do not leave the traceback-returning version in place.
 
 Rebuild and re-trigger the URLs from Step 1. Confirm the exception/404 responses do not expose internal details. The file-download disclosure still returns 200: generic error handling does not authorize files. Document it and carry that finding to Week 7 rather than claiming this handler fixes it.
 
@@ -103,12 +111,16 @@ Rebuild and re-trigger the URLs from Step 1. Confirm the exception/404 responses
 **Why structured (JSON) logs are superior to plain text logs:**
 A plain text log entry like `ERROR 2025-01-15 login failed for jsmith` is readable by a human but difficult to query programmatically. When you have millions of log entries and need to find all failed logins by a specific user within a time window, plain text requires fragile string parsing. JSON-formatted logs can be indexed and queried by any log aggregation system (Splunk, Elasticsearch, CloudWatch) without custom parsing. The `LogRecord` object that Python passes to the `format()` method contains all available information about the log event — the `hasattr` checks allow you to include optional context fields (like `user` and `endpoint`) only when the code that generated the log event explicitly attached them.
 
-Create `flask/app/logging_config.py`:
+Complete the following edits in order. Comments marked **ADD** identify additions to existing files; the new logging module is provided in full.
+
+**4.1. Create the logging module.** Create `flask/app/logging_config.py` with the complete contents below. The formatter builds each JSON record; `configure_logging()` connects it to Flask's logger and the log file. This uses Python's standard library, so no dependency change is needed.
 
 ```python
 import logging
 import json
 from datetime import datetime
+from pathlib import Path
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -125,11 +137,70 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_entry)
+
+
+def configure_logging(app):
+    log_dir = Path("/var/log/huskyhub")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(JSONFormatter())
+
+    logger = app.logger
+    # Remove existing handlers so application events are not written twice.
+    for previous_handler in list(logger.handlers):
+        logger.removeHandler(previous_handler)
+        previous_handler.close()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    logger.propagate = False
 ```
 
-Configure Flask to use this formatter and write logs to `/var/log/huskyhub/app.log` inside the container. Create `logs/` in the course root (`mkdir -p logs` in Terminal/Git Bash; `New-Item -ItemType Directory -Force logs` in PowerShell). Add `./logs:/var/log/huskyhub` to the existing Flask service volumes; retain uploads. Set the application logger and file handler to INFO so INFO records are not filtered, replace duplicate default handlers as needed, and create the log directory before opening the file. Configure logging before routes are used. Do not log passwords or entire cookies.
+The directory must exist before the file handler opens `app.log`. Set both the logger and handler to INFO so successful-login records are not filtered out. Disabling propagation prevents these application records from also being sent to handlers on the root logger.
 
-Use `extra={"user": username, "endpoint": request.path}` on authentication/authorization events. Exception records can lack a user; the formatter deliberately treats these context fields as optional. Preserve HTTP exception codes, including the 403 responses you will introduce in Week 7.
+**4.2. Import the configuration function.** At the top of `flask/app/__init__.py`, below the imports from Step 3, add:
+
+```python
+from .logging_config import configure_logging  # ADD
+```
+
+**4.3. Configure logging when the application is created.** Inside `create_app()`, immediately after `app = Flask(__name__)`, add the call shown below:
+
+```python
+def create_app():
+    app = Flask(__name__)
+    configure_logging(app)  # ADD
+```
+
+The first two lines are existing context: add only the `configure_logging(app)` line. Keep the rest of `create_app()` below it, including the secret-key configuration, route imports, blueprint registrations, and Step 3 handlers. This ensures logging is configured before routes handle requests.
+
+**4.4. Create the host log directory.** From your `huskyhub` project folder, create `logs/` alongside `docker-compose.yaml`.
+
+**macOS / Linux / Git Bash:**
+```bash
+mkdir -p logs
+```
+
+**Windows PowerShell:**
+```powershell
+New-Item -ItemType Directory -Force logs
+```
+
+**4.5. Mount the log directory in Flask.** In `docker-compose.yaml`, find the `huskyhub-flask` service's existing `volumes:` list and add the log mount beneath the uploads mount:
+
+```yaml
+services:
+  huskyhub-flask:
+    # Keep the existing build, environment, and other service settings.
+    volumes:
+      - ./flask/app/uploads:/app/app/uploads
+      - ./logs:/var/log/huskyhub  # ADD
+```
+
+This is placement context, not a replacement for the whole Compose file. Add only the marked line to the existing list; do not create a second `volumes:` key. Preserve the uploads mount, all other services, and your Week 4 nginx HTTPS ports and certificate mounts. The mount makes `/var/log/huskyhub/app.log` inside Flask available as `logs/app.log` on your laptop and retains the log when the container is recreated.
+
+Exception records can lack a user; the formatter deliberately treats user and endpoint as optional context fields. Preserve the Step 3 HTTP exception handling, including the 403 responses you will introduce in Week 7. Do not log passwords or entire cookies.
 
 ---
 
@@ -147,15 +218,40 @@ Add log statements to the following locations in the codebase:
 | Access to a resource without authorization | WARNING | Any route that checks the role cookie |
 | Unhandled exception | ERROR | Global error handler (already done in Step 3) |
 
-`current_app` is the Flask object that exposes the logger inside a route. Make sure it is included in the import at the top of `auth.py`:
+**5.1. Add access to the application logger.** In `flask/app/routes/auth.py`, add `current_app` to the existing Flask import. Keep the password utility import you added in Week 4:
 
 ```python
-from flask import Blueprint, current_app, request, redirect, url_for, render_template, make_response
+from flask import (
+    Blueprint, current_app, request, redirect, url_for,  # ADD current_app
+    render_template, make_response
+)
+from ..database import get_connection
+from ..utils import hash_password, check_password
 ```
 
-If `current_app` is missing from the import, login will throw a `NameError` and return a 500 error on every POST.
+The surrounding imports are existing context: keep one copy of each. `current_app` exposes the Flask application logger inside a route. If it is missing from the import, the logging call will raise a `NameError`.
 
-Also add `current_app` to the existing Flask import in `admin.py` if you add authorization-denial logging there.
+**5.2. Add the successful-login event.** Inside `login()`, find the successful-password branch from Week 4. Add the INFO call before `resp = make_response(...)`:
+
+```python
+        if user and check_password(password, user["password"]):
+            current_app.logger.info(  # ADD
+                "Successful login",
+                extra={"user": user["username"], "endpoint": request.path},
+            )
+            resp = make_response(redirect(url_for("home")))
+            # Store identity in cookies so the app knows who is logged in
+            resp.set_cookie("authenticated", user["username"])
+            resp.set_cookie("role", user["role"])
+            resp.set_cookie("user_id", str(user["user_id"]))
+            return resp
+```
+
+Add only the logging call; the condition, response, and cookies are existing context. Keep the bcrypt password check, the query's `approved = 1` restriction, and the retrieved user's identity. Leave the existing failed-login branch and the rest of the route in place for the next instruction.
+
+The message names the event, INFO identifies its level, and `extra` supplies the user and endpoint fields read by the formatter. For a successful login, use the username from the retrieved user record. Do not include the submitted password or cookie contents.
+
+**5.3. Implement the remaining events yourself.** Use the event table and successful-login example to implement failed-login and authorization-denial logging. Include the attempted username for failed logins and user/endpoint context for denials. Also add `current_app` to the existing Flask import in `admin.py` if you log denials there. Retain the existing authentication and access-check behavior. The ERROR event for unhandled exceptions is already implemented by the Step 3 handler; do not add a second copy.
 
 Rebuild after the Python and Compose changes before verifying the log events in Step 6:
 
