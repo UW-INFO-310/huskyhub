@@ -1,40 +1,37 @@
 # Week 6 Lab — Authentication: Sessions, Cookies, and Brute Force
 
-**Quarter:** Autumn 2026 · **Required standalone lab**
-
 **Lecture:** Sessions and Authentication
-
-**Prerequisites:** Week 4 bcrypt and HTTPS; Week 5 structured logging. Continue your cumulative application.
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
 
 ---
 
 ## Overview
 
-HTTPS protects traffic, and bcrypt protects stored passwords. Neither prevents a user editing the identity cookies HuskyHub trusts, nor limits online password guesses. This week you demonstrate role and user impersonation, examine the transition into authenticated state, migrate the whole app to signed sessions, and implement account lockout. All nine steps below are required.
+HTTPS protects traffic, and bcrypt protects stored passwords. This week you examine how HuskyHub trusts identity cookies and handles repeated login failures. You will migrate the application to signed sessions and implement account lockout.
 
-Signed sessions, brute force, and lockout are **not** part of Week 4 or extra credit in Autumn. Additional detection alerts are available as an optional extension after this required lab. Midterm timing and due date are **TBD by the instructor**.
+---
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
 | Browser Developer Tools | Observe and modify cookies |
-| Python requests | Measure an online password-guessing attack |
+| Python requests | Run the login exercise |
 | Flask session / itsdangerous | Protect authenticated state against tampering |
 | MySQL CLI | Add counters and inspect lockout state |
-| Week 5 JSON logs | Observe successful and failed login attempts |
 
-Use `python3` on macOS/Linux and `python` on Windows. Install local scripting tools in a virtual environment as described in the troubleshooting guide. The Flask application already provides itsdangerous transitively; you do not need a new session backend.
+Use `python3` on macOS/Linux and `python` on Windows. See the [troubleshooting guide](../../TROUBLESHOOTING.md) for installing local scripting tools.
+
+---
 
 ## Steps
 
+Run terminal commands from your existing `huskyhub` folder. Continue with Week 4 bcrypt and HTTPS, and keep Week 5’s structured logging.
+
 ### 1. Inspect Authentication Cookies
 
-Log in as `jsmith` at `https://localhost`. In Developer Tools, record every cookie's name, value, domain, path, and HttpOnly/Secure/SameSite attributes. Compare these observations with Week 1.
+Log in as `jsmith` at `https://localhost`. In Developer Tools, identify the cookies that carry the username, role, and database ID.
 
-Explain which values claim identity, role, or database ID. Cookies reside in the browser; a server needs an independent way to validate claims that a client can change.
+---
 
 ### 2. Demonstrate Role Forgery
 
@@ -42,27 +39,31 @@ Change `role=student` to `role=admin`. Reload and open `/admin/users`. Record th
 
 Restore the original role and log out before the next test. This is cookie forgery, not guessing the admin password.
 
+---
+
 ### 3. Demonstrate User Impersonation
 
 Log in again as `jsmith` (ID 3). Change `user_id` to 4, then open `/grades` **without a student_id query parameter**. Record whose grades appear. The URL-based ownership flaw is a separate Week 7 exercise; this test isolates the trusted-cookie identity flaw.
 
 Restore the original cookies and log out. Keep evidence from both role and identity forgery.
 
+---
+
 ### 4. Examine the Authentication Transition and Session Fixation
 
-Record cookies before login, after a successful login, and after logout. There may be an unrelated Flask flash-message cookie, but the starter's authentication is based on three unsigned identity cookies, not an authenticated session identifier.
+**How session fixation relates to the starter:** Session fixation requires the server to keep using an attacker-known session ID after login. A server-side session backend can counter this by issuing a new ID at login. HuskyHub’s starter uses three unsigned identity cookies to identify the logged-in user.
 
-Classical **session fixation** requires an attacker-known identifier that the server continues treating as the same session after a victim logs in. A server-side session backend normally counters this by regenerating its identifier at authentication. Do not claim you observed that exploit in this starter: there is no such authentication identifier to fix. Explain the precondition and compare it with the forgery you actually demonstrated.
+Compare the cookies before and after a successful login. Note which cookies appear when HuskyHub establishes identity. Flask may also use a cookie for flash messages.
 
-In Steps 6–7 you will instead replace untrusted identity claims with authenticated, signed client-side state and discard pre-login state. Record the difference between those mechanisms rather than treating every cookie as a server-side session ID.
+---
 
-### 5. Script and Measure a Brute Force Attack
+### 5. Script a Brute Force Attack
 
 First watch the POST to `/login` in the browser Network tab. A wrong password should return 200 with the generic login error; a correct password should return 302 with a Location leading to the home page. Examine the POST itself, not the 200 obtained after following a redirect.
 
 Write `brute.py` to read `labs/week-06/wordlist.txt`, test username `tbrown`, and stop when login succeeds. The correct fixture password is after the first five guesses, so the same wordlist will later demonstrate lockout. Baseline the unprotected attack **before** adding counters.
 
-Use the following request pattern and add your own loop, attempt counter, timing, and output:
+Use the following request pattern and add your own loop and attempt counter:
 
 ```python
 import requests
@@ -85,11 +86,13 @@ Run from the course root:
 python3 brute.py
 ```
 
-On Windows use `python brute.py`. Record attempts, elapsed time, approximate requests per second, and failed-login records from Week 5. bcrypt deliberately slows password checks, so do not assume a particular guessing speed.
+On Windows use `python brute.py`. Record the attempt count and whether the baseline run succeeded.
 
-### 6. Migrate the Whole Application to Signed Sessions
+---
 
-Flask's default session stores serialized, **readable but signed** data in a client cookie. Itsdangerous verifies the signature before trusting it. Signing protects integrity; it does not encrypt the values or prevent replay of an already stolen valid cookie. Avoid storing passwords or other secrets in it. The pinned Flask version's default digest is SHA-1 with HMAC; do not describe it as encrypted or as a SHA-256 configuration you never set.
+### 6. Remediation — Cryptographically Signed Sessions
+
+**What signing protects:** Flask stores readable session data in a signed cookie and verifies the signature before trusting the data. A valid cookie can still be replayed if it is stolen.
 
 Generate a strong secret **once**, using the command for your platform:
 
@@ -99,7 +102,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 On Windows use `python -c` with the same quoted expression. Replace the fixture value of `FLASK_SECRET_KEY` in `.env`. Require that environment setting in `flask/app/__init__.py`; do not silently use the public development fallback for hardened sessions. Do not generate a different secret at every startup.
 
-Use Flask `session` assignments after credentials, approval, and any lockout checks succeed:
+Set the Flask session values after login checks succeed:
 
 ```python
 session['authenticated'] = user['username']
@@ -107,28 +110,28 @@ session['role'] = user['role']
 session['user_id'] = user['user_id']
 ```
 
-Keep Week 4's bcrypt verification and Week 5's logging. Complete this checklist:
+Keep Week 3’s chatbot fixes, Week 4’s bcrypt verification, and Week 5’s logging.
 
 - Import `session` wherever you use it.
-- Replace the three login `set_cookie` calls with signed session state; return the login redirect normally.
+- Replace the three login `set_cookie` calls with signed session state and keep the login redirect.
 - Change logout to clear the session. Delete the old identity cookies during migration so stale browser values do not confuse testing.
-- Replace identity/role reads in `auth.py`, `grades.py`, `enrollment.py`, `messages.py`, `documents.py`, `admin.py`, `chatbot.py`, and the home route in `__init__.py` with `session.get(...)`. Retain legitimate request parameters; a grades URL's `student_id` is not a cookie read.
-- Keep Week 3's chatbot fixes during this migration. The provided AI tests also support signed-session identity; rerun them using the commands in [Week 3](../week-03/README.md#9-run-the-provided-automated-tests).
+- Replace identity and role reads in `auth.py`, `grades.py`, `enrollment.py`, `messages.py`, `documents.py`, `admin.py`, `chatbot.py`, and the home route in `__init__.py` with `session.get(...)`. Keep URL parameters such as `student_id`.
 - Update `templates/base.html`, whose navbar and admin links also read cookies. Flask exposes `session` to Jinja automatically.
 - Set `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SECURE=True`, and `SESSION_COOKIE_SAMESITE='Lax'`; HTTPS from Week 4 is required for the Secure cookie.
-- Search across routes **and templates** for remaining identity reads from `request.cookies`; none should remain. Raw cookie access by Flask's own session machinery is expected.
 
-Recreate/rebuild Flask, log in, and confirm one signed session drives all normal pages and the navbar. It may look encoded, but its data is not secret. Tamper with one character and verify the authenticated state is rejected.
+---
 
-### 7. Clear Pre-Login State Before Establishing Identity
+### 7. Remediation — Clear Pre-Login State
 
-Place `session.clear()` after successful credential/approval/lockout verification and before writing authenticated session values. Check that this ordering preserves Week 5 log events and that logout also clears state.
+**Why the order matters:** Clear the pre-login session so its state does not carry into the newly authenticated session.
 
-Record the pre-login and post-login state. Log in as one account, log out, and log in as another; no role or identity should carry over. After a Flask restart, a valid session signed with the same secret should still work.
+Place `session.clear()` after successful credential and approval checks and immediately before writing authenticated session values. Keep this ordering when you add lockout in Step 8.
 
-This is an authenticated-state transition for a signed client-side cookie. It does **not** rotate a server-side identifier or revoke copies of a previously valid signed cookie. Explain why replay of a stolen cookie remains possible until expiry or a separate revocation control, and how HTTPS/HttpOnly reduce theft opportunities. Keep the classical fixation comparison from Step 4 in your report.
+---
 
-### 8. Implement Account Lockout
+### 8. Remediation — Account Lockout
+
+**What lockout does:** After repeated failed logins, the account temporarily stops accepting password attempts. A generic error gives the browser the same message for different login failures.
 
 Add these columns to the running users table, using the MySQL CLI from the course root:
 
@@ -142,35 +145,29 @@ ALTER TABLE users
   ADD COLUMN lockout_until DATETIME NULL;
 ```
 
-Inspect the schema first and do not repeat ADD COLUMN if it already exists. Also add both columns to the users table definition in `database/init.sql`, so resetting Docker volumes leaves a schema compatible with your hardened login. Keep plaintext fixture data there as the migration input and rerun your Week 4 hashing migration after a reset.
+Add only missing columns. Also add both to the users table definition in `database/init.sql` so the schema survives a volume reset. Rerun the Week 4 hashing migration if you reset the database.
 
 Implement the login logic yourself:
 
 1. Retrieve the account and retain its approval restriction. Unknown, unapproved, wrong-password, and locked-account cases return the same generic client error.
-2. If lockout_until is still in the future, reject without checking the password.
+2. If `lockout_until` is still in the future, reject without checking the password.
 3. Clear expired lockout state before counting a new failure, so the account can recover after 15 minutes.
-4. Increment and persist failed_attempts for an existing eligible account after a wrong password. At five failures, set a 15-minute lockout using the database's clock.
+4. Increment and persist `failed_attempts` for an existing eligible account after a wrong password. At five failures, set a 15-minute lockout using the database's clock.
 5. On a valid, approved login, reset counters and lockout state; clear pre-login session state, then establish signed identity.
 6. Preserve security log events without logging passwords or signed cookie contents.
 
-Do not give unknown users a different client response, and do not lock out unrelated accounts. Handle invalid input without raising an exception or bypassing bcrypt. Consider the denial-of-service tradeoff of an attacker deliberately locking other users' accounts.
+---
 
-### 9. Verify All Required Defenses
+### 9. Verify the Remediations
 
-Record before/after evidence for each case:
+Rebuild and recreate Flask after Steps 6–8 so it picks up your code and the new secret in `.env`. Record the result of each check.
 
 | Check | Expected hardened outcome |
 |---|---|
-| Old role/user_id cookies changed or supplied directly | Do not grant a different identity or role |
-| One character changed in signed session | Authenticated state rejected |
-| Correct approved credentials | Normal login and grades access |
-| pending1 or a new unapproved registration | Generic login failure |
-| Logout, then a normal request without copied cookies | Login required |
-| Switch accounts | No previous role/identity retained |
-| Restart Flask with the same secret | Existing valid session remains usable |
-| Re-run wordlist against an unlocked tbrown | Five failures trigger lockout; later correct password fails during lockout |
-| Expired lockout / successful permitted login | Account recovers and counters reset |
-| Wrong password, nonexistent user, locked user | Same generic error, no traceback |
+| Normal login, grades, navbar, and logout | The correct identity appears after login. Protected pages require login again after logout. |
+| Repeat the identity and role checks from Steps 2–3 | The old identity cookies no longer control access. |
+| Change one character in the signed session cookie | The application rejects the modified session. |
+| Repeat Step 5 and check lockout | Five failed attempts trigger lockout. A correct password during lockout returns the same generic error as a wrong password. |
 
 To repeat lockout tests without resetting all course work, clear just the test account in MySQL:
 
@@ -178,26 +175,30 @@ To repeat lockout tests without resetting all course work, clear just the test a
 UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE username = 'tbrown';
 ```
 
-Inspect code and seed schema for reset compatibility. If you test an actual volume reset, back up evidence first and rerun password migration before testing login. A copied valid signed session is still replayable: report that limitation instead of claiming logout or signing alone provides server-side revocation.
+---
 
 ## Write-Up Questions
 
-**Q1.** Explain session fixation and its attacker precondition. How does clearing pre-login state help your actual Flask implementation, and why is this different from rotating a server-side session ID? What does signing fail to prevent?
+**Q1.** Describe the session fixation attack in your own words. What precondition must an attacker satisfy before the victim logs in? How does rotating a server-side session ID prevent fixation, and what does clearing pre-login state accomplish in HuskyHub?
 
-**Q2.** Why do wrong-password, nonexistent-user, and locked-account cases share a generic error? Explain the enumeration and lockout tradeoffs.
+**Q2.** Your account lockout returns the same error message whether the password is wrong or the account is locked. Why? What attack does this generic message help mitigate?
 
-**Q3.** Where would MFA intervene in the login flow, and why would it not eliminate the need for password hashing, safe sessions, and account lockout?
+**Q3.** Suppose HuskyHub required multi-factor authentication (MFA) to complete login. At exactly what point in the authentication flow does MFA intervene? Why does MFA not eliminate the need for strong password policies and account lockout?
+
+---
 
 ## Hacker Mindset Prompt
 
-- **Contrarian:** What was wrong with trusting a role cookie, and how does signing change that trust boundary?
-- **Committed:** Compare bcrypt's offline protection with account lockout's online protection. What does each leave unaddressed?
-- **Creative:** Explain credential stuffing and password spraying. Which detection or prevention control would you add, and why?
+Attackers can guess passwords against a live login, try to crack stolen password hashes offline, or reuse credentials exposed by another service.
+
+Reflect on:
+
+- **Contrarian:** The application trusts a cookie value to determine who the user is and what they are allowed to do. What is the fundamental flaw in this trust model, and how does signing correct it?
+- **Committed:** Combine bcrypt from Week 4 with account lockout this week. Describe how these two controls create a layered defense. What does each one stop that the other does not?
+- **Creative:** What is credential stuffing and why does it succeed even against applications that have never been breached themselves? What control would you add to HuskyHub to detect and block a credential stuffing campaign?
+
+---
 
 ## Optional Extension
 
-After the required lab, use [Attack-Detection Logging](OPTIONAL_DETECTION.md) to enrich your Week 5 logs. Its additional alerts are optional and do not replace any required authentication step.
-
-## Submission Checklist
-
-Submit the four-section report in [LAB_GUIDE.md](../../LAB_GUIDE.md), the cookie/transition evidence, brute.py and measurements, before/after lockout results, changed route/template/schema files or a diff, and normal-use verification. Mark optional alerts separately. Due date, points, and LMS destination are **TBD by the instructor**.
+Use [Attack-Detection Logging](OPTIONAL_DETECTION.md) to enrich your Week 5 logs.
