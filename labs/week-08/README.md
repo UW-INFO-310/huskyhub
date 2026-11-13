@@ -1,9 +1,5 @@
 # Week 8 Lab — SQL Injection and OWASP Top 10
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Weeks 3–7; current AI fixes, bcrypt, signed sessions, logging, and authorization
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 **Lecture:** Threat Modeling, STRIDE, and DREAD; OWASP Top 10 and SQL Injection
 
 ---
@@ -49,6 +45,8 @@ pip install sqlmap
 ---
 
 ## Steps
+
+Use your cumulative HuskyHub application from Weeks 3–7, including the AI fixes, bcrypt, signed sessions, logging, and authorization.
 
 ### 1. Complete a STRIDE Threat Model
 
@@ -239,8 +237,3 @@ Reflect on:
 - **Contrarian:** sqlmap found the vulnerability and dumped the database in minutes. What does this say about the asymmetry between how long it takes to introduce a vulnerability and how long it takes to exploit it?
 - **Committed:** An attacker who dumps the users table via SQL injection has credentials and personal data. Describe the complete attack chain that follows: what do they do next, and what other systems might be affected beyond HuskyHub?
 - **Creative:** The database user in HuskyHub has read and write access to all tables. If you were designing the database access policy from scratch, how would you apply the principle of least privilege to reduce the damage a SQL injection attack could cause?
-
-
-## Submission checklist
-
-Submit the [four-section report](../../LAB_GUIDE.md), required step evidence, code or diffs, answers/reflections, and normal-use checks. Include the threat model/tool outputs or tests named in this lab. Due date, points, and LMS destination are **TBD by the instructor**.

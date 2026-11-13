@@ -1,9 +1,5 @@
 # Week 9 Lab — XSS, Bug Bounty, and Automated Testing
 
-**Quarter:** Autumn 2026 · **Prerequisites:** Weeks 3–8 cumulative app; keep the Week 3 AI fixes
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 **Lecture:** XSS and Testing Web Services with SAST and DAST; Manual Testing and Hardening
 
 ---
@@ -35,6 +31,8 @@ ZAP is available for macOS, Windows, and Linux. Download the installer for your 
 ---
 
 ## Steps
+
+Use your cumulative HuskyHub application from Weeks 3–8, including the Week 3 AI fixes.
 
 ### 1. Test Messaging for Stored XSS
 
@@ -230,8 +228,3 @@ Reflect on:
 - **Contrarian:** The developer added `| safe` to the message template to "support rich formatting." What assumption did they make about who would be sending messages, and how did that assumption fail?
 - **Committed:** The bug bounty model pays researchers to find vulnerabilities before attackers do. What distinguishes authorized security research from unauthorized access, legally and ethically?
 - **Creative:** Even after removing `| safe` and adding a CSP, are there any remaining ways an attacker could abuse the messaging system? What would a defense-in-depth strategy look like beyond what you implemented?
-
-
-## Submission checklist
-
-Submit the [four-section report](../../LAB_GUIDE.md), required step evidence, code or diffs, answers/reflections, and normal-use checks. Include the threat model/tool outputs or tests named in this lab. Due date, points, and LMS destination are **TBD by the instructor**.

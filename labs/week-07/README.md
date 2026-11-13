@@ -1,9 +1,5 @@
 # Week 7 Lab — Authorization, IDOR, and Offensive Tools
 
-**Quarter:** Autumn 2026 · **Prerequisites:** required Week 6 signed sessions; Week 5 HTTP exception handling
-
-[Course index](../../README.md) · [Setup help](../../TROUBLESHOOTING.md) · [Report requirements](../../LAB_GUIDE.md)
-
 **Lecture:** Authorization and Permissions; Hackers, Offensive Techniques, and Malware
 
 ---
@@ -36,6 +32,8 @@ Burp Suite is available for macOS, Windows, and Linux. Download the installer fo
 ---
 
 ## Steps
+
+Use your cumulative HuskyHub application with Week 6 signed sessions and Week 5 HTTP exception handling.
 
 ### 1. Map Authorization-Sensitive Endpoints
 
@@ -208,8 +206,3 @@ Reflect on:
 - **Contrarian:** The application showed the correct data to the correct user in the UI. A student who only uses the UI would never notice this vulnerability. What does this say about the gap between "works correctly" and "is secure"?
 - **Committed:** A committed attacker who discovers an IDOR vulnerability does not stop at one record. Write a Python script (pseudocode is fine) that would exfiltrate the complete grade database using the IDOR you found.
 - **Creative:** IDOR becomes significantly harder to exploit if object IDs are not sequential integers. What alternative ID scheme would make enumeration impractical, and what are the tradeoffs?
-
-
-## Submission checklist
-
-Submit the [four-section report](../../LAB_GUIDE.md), required step evidence, code or diffs, answers/reflections, and normal-use checks. Include the threat model/tool outputs or tests named in this lab. Due date, points, and LMS destination are **TBD by the instructor**.
