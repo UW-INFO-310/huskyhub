@@ -1,4 +1,4 @@
-# Week 6 Lab — Authentication: Sessions, Cookies, and Brute Force
+# Week 6 Lab: Authentication, Sessions, Cookies, and Brute Force
 
 **Lecture:** Sessions and Authentication
 
@@ -46,13 +46,17 @@ Run terminal commands from your existing `huskyhub` folder. Continue with Week 4
 
 **What the current trust model is and why it fails**
 
-HuskyHub uses cookie values supplied by the browser to identify the user and their role. Without an integrity check, the application cannot tell whether the values it received match the ones it originally set.
+After login, the browser stores the cookies HuskyHub sets and sends them back on later requests. HuskyHub uses their values to identify the user and decide what they can access. The browser sends whatever values are currently stored. Without an integrity check, HuskyHub cannot tell whether those values match the ones it originally set.
 
 Log in as `jsmith` at `https://localhost`. In Developer Tools, open the cookie storage panel and record each cookie’s name, value, and flags. Which cookies identify the user, their role, or their database ID in readable form?
 
 ---
 
 ### 2. Demonstrate Role Forgery
+
+**What a server-side check means and what HuskyHub does instead**
+
+A server-side check means the application independently verifies a claim before acting on it. For example, the server can use the authenticated user’s identity to look up their role in the database. HuskyHub’s starter reads the role from a browser cookie and accepts the value without verifying it. That makes a role supplied by the browser look the same to the application as a role it assigned itself.
 
 Change `role=student` to `role=admin`. Reload and open `/admin/users`. Record the request and what access you gained. Inspect `is_admin()` in `flask/app/routes/admin.py`: what evidence does it actually check?
 
@@ -61,6 +65,10 @@ Restore the original role and log out before the next test. This is cookie forge
 ---
 
 ### 3. Demonstrate User Impersonation
+
+**How HuskyHub decides whose grades to show**
+
+When no student ID is supplied in the URL, the grades page uses the identity it gets from the browser. This check shows why the application needs to establish who is signed in before deciding which records to display.
 
 Log in again as `jsmith` (ID 3). Change `user_id` to 4, then open `/grades` **without a student_id query parameter**. Record whose grades appear. The URL-based ownership flaw is a separate Week 7 exercise; this test isolates the trusted-cookie identity flaw.
 
@@ -72,13 +80,17 @@ Restore the original cookies and log out. Keep evidence from both role and ident
 
 **How session fixation relates to the starter**
 
-Session fixation occurs when the server keeps using an attacker-known session ID after login. A server-side session backend can counter it by issuing a new ID when the user authenticates.
+Session fixation occurs when the server keeps using an attacker-known session ID after the victim logs in. The ID then gives access to an authenticated session even though it was known before login. A server-side session backend can counter this by replacing the ID at login and invalidating the earlier one. HuskyHub’s starter uses unsigned identity cookies, so the observation here is about which state changes at login.
 
 Record the cookies present before login and again after login. HuskyHub’s starter establishes identity with three unsigned cookies. Flask may also use a separate cookie for flash messages. Which cookies does HuskyHub use to recognize the logged-in user?
 
 ---
 
 ### 5. Script a Brute Force Attack
+
+**What the requests library does**
+
+The `requests` library lets Python send HTTP requests and inspect the server’s responses. Submitting the login form sends data in a POST request. The response to that submission and the page the browser displays after following a redirect are separate responses.
 
 First watch the POST to `/login` in the browser Network tab. A wrong password should return 200 with the generic login error; a correct password should return 302 with a Location leading to the home page. Examine the POST itself, not the 200 obtained after following a redirect.
 
@@ -111,11 +123,11 @@ On Windows use `python brute.py`. Record the attempt count and whether the basel
 
 ---
 
-### 6. Remediation — Cryptographically Signed Sessions
+### 6. Remediation with Cryptographically Signed Sessions
 
 **Why signing prevents cookie forgery**
 
-Flask stores readable session data in a signed cookie. It verifies the signature before accepting the values. Editing the cookie invalidates the signature. A stolen valid cookie can still be replayed.
+Flask’s `session` object holds values such as the signed-in username and role. Flask serializes those values into a cookie and signs the data using the application’s secret key. On later requests, Flask verifies the signature before accepting the values. Editing the data invalidates the signature. The cookie’s contents can still be read, and a stolen valid cookie can still be replayed.
 
 Generate a strong secret **once**, using the command for your platform:
 
@@ -139,9 +151,11 @@ Set `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SECURE=True`, and `SESSION_C
 
 ---
 
-### 7. Remediation — Clear Pre-Login State
+### 7. Remediation by Clearing Pre-Login State
 
 **Why the order matters**
+
+The browser can already have session data before the user signs in. Clearing that state at the point of successful login gives the authenticated session a clean start. Clearing it after setting the authenticated values would also erase the identity you just established.
 
 Clear any pre-login state after successful credential and approval checks and immediately before writing the authenticated session values.
 
@@ -153,11 +167,11 @@ Flask writes the new signed state into the browser cookie. The cookie contains t
 
 ---
 
-### 8. Remediation — Account Lockout
+### 8. Remediation with Account Lockout
 
 **What lockout and generic errors accomplish**
 
-Account lockout temporarily stops password attempts after repeated failures. A shared error message reduces the clues that a login response reveals about whether an account exists or is locked.
+Account lockout limits repeated guesses by temporarily blocking further login attempts once the failure counter reaches a threshold. The error message matters too. A distinct message for a locked account can reveal that the username exists. Using the same message for different login failures removes that clue from the response.
 
 Add these columns to the running users table, using the MySQL CLI from the course root:
 
@@ -185,6 +199,10 @@ Keep the existing approval checks and logging. Clear pre-login state before writ
 ---
 
 ### 9. Verify the Remediations
+
+**Why to check normal logins as well**
+
+A change can block the old behavior while also breaking a legitimate login. Checking both outcomes shows whether the defenses work and whether an approved user can still use the application.
 
 Rebuild and recreate Flask after Steps 6–8 so it picks up your code and the new secret in `.env`. Record the result of each check.
 
