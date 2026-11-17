@@ -40,7 +40,11 @@ Use your cumulative HuskyHub application with Week 6 signed sessions and Week 5 
 **What makes an endpoint "authorization-sensitive":**
 An authorization-sensitive endpoint is any URL where the data returned or the action performed should be restricted to a specific user or role. The clearest indicator is an ID parameter in the URL or request body — `student_id`, `user_id`, `doc_id`. These IDs are object references: they tell the server which database record to retrieve. If the server retrieves whichever record the client requests without first confirming the client owns or has permission to access that record, every other user's data is one URL edit away.
 
-Log in as `jsmith`. Compile a list of every URL containing an ID parameter: `student_id`, `user_id`, `doc_id`, `enrollment_id`, etc. This is your IDOR candidate list.
+Log in as a fixture student and open a page that shows your own records. Open your browser’s **Developer Tools → Network**, reload the page, and select the request for that page. Compare its request URL with the address bar. If the request URL has a query string (the part after `?`), look for values that identify a record.
+
+A page can show a record without putting its ID in the address bar. A link can carry an ID in its own URL, and a form can store an ID in a hidden field that is sent when the form is submitted. Use the page markup to inspect links and forms for actions that change records.
+
+For each reference you find, note the page, what the ID identifies, and where it appears (for example, a link URL or a form field).
 
 ---
 
@@ -113,11 +117,16 @@ Then use **Intruder** to automate this:
 
 ---
 
-### 6. Find a Second IDOR Endpoint
+### 6. Review Ownership in a Second Feature
 
-Using Burp's history or by manually browsing, identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Strong candidates: `/documents/download` (references a file path directly), `/documents/delete` (`doc_id`), and `/enrollment/drop` (`enrollment_id`). Note that `/enrollment` and `/messages` now read your user_id from the **signed session** rather than a URL parameter. The old cookie-tampering path should already be closed; focus on client-controlled object references that still lack ownership checks.
+Pick enrollment or documents and start with a record that belongs to your fixture account. The page shows a label you recognize, while the app uses a reference to identify the underlying record.
 
-Document the endpoint, vulnerable parameter, and exposed data/action using only fictional fixture records you are allowed to alter. For document tests create a harmless file as each of two fixture users before comparing IDs. This second finding is required; implementing an additional ownership fix beyond the assigned grade/admin remediation may be included as an extension.
+| Feature | What you see | What the app uses |
+|---------|--------------|-------------------|
+| Enrollment | A course name in your schedule | An enrollment ID that identifies your specific registration for that course. A course ID identifies the course itself. |
+| Documents | A filename in your list of uploads | A document reference that identifies the uploaded item. A link or form can carry that reference separately from the displayed filename. |
+
+Use the template and its corresponding route handler to trace one reference from the page to the server. In your report, name the feature, explain what the reference identifies, and describe how the handler decides whether the signed-in user may access or change that record. If the handler is missing an ownership check, state the rule it should enforce. This second review is required. Implementing an additional ownership fix is optional.
 
 ---
 
@@ -181,7 +190,6 @@ Repeat Steps 2 and 3 against the hardened application. Confirm:
 - `/grades` without a query still shows the student's own records
 - Legitimate access still works for advisors and admins
 - Unauthenticated requests are denied, with no internal traceback
-- Old unsigned role cookies do not bypass the signed-session policy
 
 Paste the HTTP responses in your report.
 
