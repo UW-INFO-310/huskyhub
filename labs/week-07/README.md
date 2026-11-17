@@ -204,5 +204,5 @@ IDOR is the simplest class of vulnerability to exploit — change a number, get 
 Reflect on:
 
 - **Contrarian:** The application showed the correct data to the correct user in the UI. A student who only uses the UI would never notice this vulnerability. What does this say about the gap between "works correctly" and "is secure"?
-- **Committed:** A committed attacker who discovers an IDOR vulnerability does not stop at one record. Write a Python script (pseudocode is fine) that would exfiltrate the complete grade database using the IDOR you found.
+- **Committed:** Suppose a missing ownership check went unnoticed for a month. What would you need to learn about the affected records and accounts before you could describe the impact?
 - **Creative:** IDOR becomes significantly harder to exploit if object IDs are not sequential integers. What alternative ID scheme would make enumeration impractical, and what are the tradeoffs?
