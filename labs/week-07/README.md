@@ -117,16 +117,18 @@ Then use **Intruder** to automate this:
 
 ---
 
-### 6. Review Ownership in a Second Feature
+### 6. Find a Second IDOR Endpoint
 
-Pick enrollment or documents and start with a record that belongs to your fixture account. The page shows a label you recognize, while the app uses a reference to identify the underlying record.
+Find one additional IDOR endpoint beyond `/grades`. Start with an enrollment or document record that belongs to your fixture account. The page shows a label you recognize, while the app uses a reference to identify the underlying record.
 
 | Feature | What you see | What the app uses |
 |---------|--------------|-------------------|
 | Enrollment | A course name in your schedule | An enrollment ID that identifies your specific registration for that course. A course ID identifies the course itself. |
 | Documents | A filename in your list of uploads | A document reference that identifies the uploaded item. A link or form can carry that reference separately from the displayed filename. |
 
-Use the template and its corresponding route handler to trace one reference from the page to the server. In your report, name the feature, explain what the reference identifies, and describe how the handler decides whether the signed-in user may access or change that record. If the handler is missing an ownership check, state the rule it should enforce. This second review is required. Implementing an additional ownership fix is optional.
+Use the template and its corresponding route handler to trace the reference from the page to the server. Check whether the handler verifies that the signed-in user may access or change the specific record. If it enforces that permission, review another endpoint.
+
+In your report, name the vulnerable endpoint, explain what the reference identifies, and identify where the handler should enforce authorization. Explain what data or action the missing check exposes. This second finding is required. Implementing an additional ownership fix is optional.
 
 ---
 
@@ -189,7 +191,6 @@ Repeat Steps 2 and 3 against the hardened application. Confirm:
 - Accessing admin routes as a student returns HTTP 403
 - `/grades` without a query still shows the student's own records
 - Legitimate access still works for advisors and admins
-- Unauthenticated requests are denied, with no internal traceback
 
 Paste the HTTP responses in your report.
 
