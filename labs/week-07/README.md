@@ -37,13 +37,13 @@ Use your cumulative HuskyHub application with Week 6 signed sessions and Week 5 
 
 ### 1. Map Authorization-Sensitive Endpoints
 
-**What makes an endpoint "authorization-sensitive"**
+**What makes an endpoint authorization-sensitive**
 
-An authorization-sensitive endpoint returns data or performs an action that should be restricted to a specific user or role. A record ID tells the server which object the request refers to. The server must check that the signed-in user has permission to access that specific object.
+An authorization-sensitive endpoint is any URL where the data returned or the action performed should be restricted to a specific user or role. An ID parameter in the URL or request body is a clue. These IDs are object references. They tell the server which record to read or change, and the server must check that the signed-in user has permission for that record.
 
-Start with `student_id`, which identifies a student's record. When you open your own grades page, the URL may have no query string because the app can use your signed-in identity to choose the record.
+Log in as `jsmith` and type `https://localhost/grades?student_id=3` into your browser’s address bar to view your own grades. The `?` starts the query string. The text after it follows the format `name=value`. Here, `student_id` is the name and `3` is the ID for `jsmith`.
 
-Log in as a fixture student and make a short list of pages where viewing or changing a record should depend on who is signed in. For each page, note what record it uses and who should have access.
+Make a list of pages that read or change records. For each, note what the ID identifies and how the app receives it. Use `?name=value` for pages that accept an ID in the URL, using your own fixture record. In HuskyHub, `enrollment_id` identifies a specific registration and is sent as a form field.
 
 ---
 
