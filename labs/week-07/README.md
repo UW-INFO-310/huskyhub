@@ -43,7 +43,7 @@ An authorization-sensitive endpoint is any URL where the data returned or the ac
 
 Log in as `jsmith` and type `https://localhost/grades?student_id=3` into your browser’s address bar to view your own grades. The `?` starts the query string. The text after it follows the format `name=value`. Here, `student_id` is the name and `3` is the ID for `jsmith`.
 
-Make a list of pages that read or change records. For each, note what the ID identifies and how the app receives it. Use `?name=value` for pages that accept an ID in the URL, using your own fixture record. In HuskyHub, `enrollment_id` identifies a specific registration and is sent as a form field.
+Then compile a list of every URL you encounter in your fixture session that contains an ID parameter such as `student_id`, `user_id`, `doc_id`, or `enrollment_id`. This is your IDOR candidate list.
 
 ---
 
@@ -126,7 +126,9 @@ Find one additional IDOR endpoint beyond `/grades`. Start with an enrollment or 
 | Documents | A filename in your list of uploads | A document reference that identifies the uploaded item. A link or form can carry that reference separately from the displayed filename. |
 | Document deletion | A Delete button beside a filename | A document ID that identifies the item selected for deletion. The server should verify that the signed-in user may delete that specific item. |
 
-Use the template and its corresponding route handler to trace the reference from the page to the server. Check whether the handler verifies that the signed-in user may access or change the specific record. If it enforces that permission, review another endpoint.
+1. Choose a row from the table and find the link or form for that action in the matching file under `flask/app/templates/`. Note the endpoint and the field that identifies the record. A form can carry the ID in a hidden field.
+2. Find the matching handler under `flask/app/routes/`. Look for `request.args` when the handler reads the ID from the URL and `request.form` when it reads the ID from a submitted form.
+3. Follow that ID through the handler. Look for a check that the signed-in user may read or change the selected record. If that check is present, review another endpoint.
 
 In your report, name the vulnerable endpoint, explain what the reference identifies, and identify where the handler should enforce authorization. Explain what data or action the missing check exposes. This second finding is required. Implementing an additional ownership fix is optional.
 
