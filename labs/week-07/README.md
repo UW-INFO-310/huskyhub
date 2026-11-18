@@ -37,14 +37,13 @@ Use your cumulative HuskyHub application with Week 6 signed sessions and Week 5 
 
 ### 1. Map Authorization-Sensitive Endpoints
 
-**What makes an endpoint "authorization-sensitive":**
-An authorization-sensitive endpoint is any URL where the data returned or the action performed should be restricted to a specific user or role. The clearest indicator is an ID parameter in the URL or request body — `student_id`, `user_id`, `doc_id`. These IDs are object references: they tell the server which database record to retrieve. If the server retrieves whichever record the client requests without first confirming the client owns or has permission to access that record, every other user's data is one URL edit away.
+**What makes an endpoint "authorization-sensitive"**
 
-Log in as a fixture student and open a page that shows your own records. Open your browser’s **Developer Tools → Network**, reload the page, and select the request for that page. Compare its request URL with the address bar. If the request URL has a query string (the part after `?`), look for values that identify a record.
+An authorization-sensitive endpoint returns data or performs an action that should be restricted to a specific user or role. A record ID tells the server which object the request refers to. The server must check that the signed-in user has permission to access that specific object.
 
-A page can show a record without putting its ID in the address bar. A link can carry an ID in its own URL, and a form can store an ID in a hidden field that is sent when the form is submitted. Use the page markup to inspect links and forms for actions that change records.
+Start with `student_id`, which identifies a student's record. When you open your own grades page, the URL may have no query string because the app can use your signed-in identity to choose the record.
 
-For each reference you find, note the page, what the ID identifies, and where it appears (for example, a link URL or a form field).
+Log in as a fixture student and make a short list of pages where viewing or changing a record should depend on who is signed in. For each page, note what record it uses and who should have access.
 
 ---
 
@@ -125,6 +124,7 @@ Find one additional IDOR endpoint beyond `/grades`. Start with an enrollment or 
 |---------|--------------|-------------------|
 | Enrollment | A course name in your schedule | An enrollment ID that identifies your specific registration for that course. A course ID identifies the course itself. |
 | Documents | A filename in your list of uploads | A document reference that identifies the uploaded item. A link or form can carry that reference separately from the displayed filename. |
+| Document deletion | A Delete button beside a filename | A document ID that identifies the item selected for deletion. The server should verify that the signed-in user may delete that specific item. |
 
 Use the template and its corresponding route handler to trace the reference from the page to the server. Check whether the handler verifies that the signed-in user may access or change the specific record. If it enforces that permission, review another endpoint.
 
