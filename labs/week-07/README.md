@@ -118,9 +118,9 @@ Then use **Intruder** to automate this:
 
 ### 6. Find a Second IDOR Endpoint
 
-Browse HuskyHub with your fixture account and identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Enrollment and documents are good places to look. Review the route handler to see whether it checks that the signed-in user has permission to access or change the referenced record.
+Using Burp's history or by manually browsing, identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Strong candidates: `/documents/download` (references a file path directly), `/documents/delete` (`doc_id`), and `/enrollment/drop` (`enrollment_id`). Note that `/enrollment` and `/messages` read your `user_id` from the **cookie** rather than a URL parameter — those are exploited by cookie tampering (Week 5), not by IDOR on a request parameter.
 
-Document the endpoint, the vulnerable parameter, and what data or action is exposed.
+Document: the endpoint, the vulnerable parameter, and what data or action is exposed.
 
 ---
 
