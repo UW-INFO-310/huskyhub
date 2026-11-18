@@ -118,19 +118,9 @@ Then use **Intruder** to automate this:
 
 ### 6. Find a Second IDOR Endpoint
 
-Find one additional IDOR endpoint beyond `/grades`. Start with an enrollment or document record that belongs to your fixture account. The page shows a label you recognize, while the app uses a reference to identify the underlying record.
+Browse HuskyHub with your fixture account and identify at least one additional endpoint vulnerable to IDOR beyond `/grades`. Enrollment and documents are good places to look. Review the route handler to see whether it checks that the signed-in user has permission to access or change the referenced record.
 
-| Feature | What you see | What the app uses |
-|---------|--------------|-------------------|
-| Enrollment | A course name in your schedule | An enrollment ID that identifies your specific registration for that course. A course ID identifies the course itself. |
-| Documents | A filename in your list of uploads | A document reference that identifies the uploaded item. A link or form can carry that reference separately from the displayed filename. |
-| Document deletion | A Delete button beside a filename | A document ID that identifies the item selected for deletion. The server should verify that the signed-in user may delete that specific item. |
-
-1. Choose a row from the table and find the link or form for that action in the matching file under `flask/app/templates/`. Note the endpoint and the field that identifies the record. A form can carry the ID in a hidden field.
-2. Find the matching handler under `flask/app/routes/`. Look for `request.args` when the handler reads the ID from the URL and `request.form` when it reads the ID from a submitted form.
-3. Follow that ID through the handler. Look for a check that the signed-in user may read or change the selected record. If that check is present, review another endpoint.
-
-In your report, name the vulnerable endpoint, explain what the reference identifies, and identify where the handler should enforce authorization. Explain what data or action the missing check exposes. This second finding is required. Implementing an additional ownership fix is optional.
+Document the endpoint, the vulnerable parameter, and what data or action is exposed.
 
 ---
 
