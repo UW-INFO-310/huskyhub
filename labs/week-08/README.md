@@ -85,22 +85,75 @@ Rank by total score. This ranking should inform which vulnerabilities you fix fi
 
 ---
 
-### 3. Test the Current Login Query for SQL Injection
+### 3. Break the Login with SQL Injection
 
-Read your cumulative auth.py first. After Week 4 it should retrieve an approved account by username and verify bcrypt separately in Python; after Week 6 it also applies lockout. It may still interpolate username into SQL, which is this week's target.
+**Why the obvious payload no longer works:**
+In earlier, standalone versions of this app the login compared the password *inside* the SQL query and identity came from a forgeable cookie, so a single tautology logged you straight in. Your cumulative app is different. After Week 4, `auth.py` retrieves the account by username and verifies the password with **bcrypt in Python**; after Week 6 it also enforces lockout and issues a **signed** session built from the retrieved row. So a bare tautology now returns a row but bcrypt still rejects an arbitrary password — you just get the generic error. That does **not** mean the login is safe: the query is still assembled with an f-string, and below you break authentication two different ways without ever defeating bcrypt directly.
 
-Compare an ordinary username with these MySQL comment probes:
+> **Historical contrast — what used to work.**
+> On the earliest version of this lab (before Weeks 4–6), the login looked like
+> `SELECT * FROM users WHERE username = '{username}' AND password = '{password}'`,
+> the stored passwords were plaintext, and identity came from a plain `user_id`/`role` cookie the client could edit. Against that code:
+>
+> ```text
+> Username:  admin'#
+> Password:  (anything)
+> ```
+>
+> commented out the whole password check and logged you in as `admin` with no password at all; `' OR '1'='1' #` did the same by making the `WHERE` clause always true. Those one-liners are exactly what the cumulative hardening in this repo was built to stop. We will bypass authentication in a (slightly) more sophisticated way that still breaks bcrypt and the hardening that we have implemented over the past few weeks.
 
+#### 3a. Bypass the approval gate on an account you control
+
+Registration creates accounts with `approved = 0`, and the login query ends in `AND approved = 1`, so a freshly registered account cannot normally log in.
+
+1. Register a test account — username `tester`, password `test`. Try to log in normally and confirm it is refused (pending approval).
+2. Now log in with:
+   ```text
+   Username:  tester'#
+   Password:  test
+   ```
+
+The query becomes:
+```sql
+SELECT * FROM users WHERE username = 'tester'#' AND approved = 1
+```
+The `#` comments out `AND approved = 1`. Your row is returned, your real password passes bcrypt, and you are logged in to an account no one approved.
+
+Document the result, and note what the injection actually defeated: the **approval** control, not the password check. bcrypt was never challenged, because you used a password you legitimately know.
+
+#### 3b. Take over the admin account with a UNION (advanced)
+
+**The idea:** bcrypt only proves that the submitted password matches the hash *in the row the query returned*. The login runs `SELECT *`, so a `UNION SELECT` lets you **fabricate that row** — including the password hash. Supply a hash of a password *you* generate, and bcrypt will validate your own password while the `role` column you supplied says `admin`. You never need admin's real password.
+
+The `users` table has 11 columns, in this order:
 ```text
-' OR '1'='1' #
-admin'#
+user_id, username, first_name, last_name, email, password, role, approved, failed_attempts, lockout_until, created_at
 ```
 
-MySQL # comments the rest of the query. Unlike --, it does not require a trailing whitespace character. In a URL parameter, encode it as %23 so the browser does not treat it as a fragment; a form body handles encoding for you.
+1. Generate a bcrypt hash of a password you choose (here, `test`):
+   ```bash
+   docker compose exec huskyhub-flask python -c "import bcrypt; print(bcrypt.hashpw(b'test', bcrypt.gensalt()).decode())"
+   ```
+   Copy the `$2b$...` string it prints.
 
-Try a wrong password first, then explain the outcome using your SQL query and bcrypt/lockout checks. **Do not expect an arbitrary password to bypass bcrypt**. A tautology can change the returned account or remove an SQL approval condition, but independent Python credential checks still matter. Use a known fixture password only to examine the account lookup result, and clear test lockout counters as needed. Authenticated identity must come from the retrieved account, not the raw submitted payload. Do not restore plaintext comparison or unsigned cookies to reproduce the older lab's login bypass.
+2. Log in with the fabricated admin row as the username (hash in column 6, `admin` in column 7), and your chosen password:
+   ```text
+   Username:  ' UNION SELECT 1,'admin','x','x','x@uw.edu','<PASTE_YOUR_HASH>','admin',1,0,NULL,NULL#
+   Password:  test
+   ```
 
-Document actual responses, server-side evidence, and the remaining SQL vulnerability. You will obtain unambiguous injection evidence at the still-vulnerable search endpoints next.
+The query becomes:
+```sql
+SELECT * FROM users WHERE username = ''
+UNION SELECT 1,'admin','x','x','x@uw.edu','<HASH>','admin',1,0,NULL,NULL#' AND approved = 1
+```
+The empty-username first `SELECT` matches nothing; the UNION contributes your one fabricated row; `#` comments the trailing `' AND approved = 1`. `fetchone()` returns your row, `check_password('test', <HASH>)` is `True`, and the app writes a **signed** `role = admin` session from the row's values.
+
+Document the admin session you obtained
+
+> Harmless side effect: the post-login counter `UPDATE ... WHERE user_id = 1` touches the real admin row's lockout counters. Nothing is destroyed. Do not restore plaintext comparison or unsigned cookies to reproduce the older bypass — the point is that the f-string query alone is enough.
+
+Document actual responses and server-side evidence for both sub-steps. You will obtain further unambiguous injection evidence at the still-vulnerable search endpoints next, and you will confirm both 3a and 3b stop working after you parameterize the login query in Step 8.
 
 ---
 
