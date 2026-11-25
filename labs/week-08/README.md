@@ -273,7 +273,7 @@ Repeat Steps 3–5 against the hardened application. Paste the sqlmap output sho
 
 ## Write-Up Questions
 
-**Q1.** Present your completed STRIDE table. For the login form specifically, write one concrete threat per STRIDE category.
+**Q1.** In Step 3b you logged in as admin even though bcrypt was still running. In your own words, explain why bcrypt did not stop you. Where did the password hash it checked actually come from? Then name one change to the login code that would have stopped the attack.
 
 **Q2.** Explain how a parameterized query prevents SQL injection at a technical level. Why does escaping input without parameterization (e.g., `real_escape_string`) fail to provide equivalent protection?
 
